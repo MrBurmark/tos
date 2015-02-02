@@ -1,0 +1,21 @@
+
+# Options for the x86 cross compiler
+CC = gcc
+CC_OPT = -Wall -nostdinc -I../include -fomit-frame-pointer -fno-defer-pop -fno-leading-underscore -mpreferred-stack-boundary=2 -O -m32 -march=i386 -fno-stack-protector
+
+LD = ld
+LD_OPT = -nostdlib -Ttext 4000 --oformat elf32-i386 -m elf_i386
+
+# Options for the host C-compiler
+CC_HOST = gcc
+CC_HOST_OPT = -I.
+
+# Options for the host C++-compiler
+CPP_HOST = g++
+
+LD_HOST = gcc
+LD_HOST_OPT = 
+
+STRIP=strip
+
+MAKEDEPEND = makedepend -f-

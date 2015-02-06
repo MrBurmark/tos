@@ -23,7 +23,7 @@ void move_cursor(WINDOW* wnd, int x, int y)
 void remove_cursor(WINDOW* wnd)
 {
 	WORD *cl = (WORD*)WINDOW_BASE_ADDR + WINDOW_OFFSET(wnd, wnd->cursor_x, wnd->cursor_y);
-	poke_w((MEM_ADDR)cl, 0x0000);
+	poke_w((MEM_ADDR)cl, ' ' | 0x0F00);
 }
 
 
@@ -43,7 +43,7 @@ void clear_window(WINDOW* wnd)
 	{
 		for (w_end = cl + wnd->width; cl < w_end; cl++)
 		{
-			poke_w((MEM_ADDR)cl, 0x0000);
+			poke_w((MEM_ADDR)cl, ' ' | 0x0F00);
 		}
 	}
 	move_cursor(wnd, 0, 0);

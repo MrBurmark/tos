@@ -113,26 +113,50 @@ int random()
 
 void init_ghost(GHOST* ghost)
 {
-    while (1) {
-	int x = random() % MAZE_WIDTH;
-	int y = random() % MAZE_HEIGHT;
-	if (maze[y][x] != ' ') continue;
-	ghost->x = x;
-	ghost->y = y;
-	break;
+    while (1)
+    {
+    	int x = random() % MAZE_WIDTH;
+    	int y = random() % MAZE_HEIGHT;
+    	if (maze[y][x] != ' ') continue;
+    	ghost->x = x;
+    	ghost->y = y;
+    	break;
     }
 }
 
 
+void wait(unsigned int n)
+{
+    unsigned int i;
+    n *= 10;
+    for(i=0; i < n; i++) ;
+}
 
 
 void create_new_ghost()
 {
+    int x, y;
+    GHOST ghost;
+    init_ghost(&ghost);
+    while(1)
+    {
+        x = random() % 4 - 1;
+        y = 0;
+        if (x % 2 == 0)
+        {
+            y = x - 1;
+            x = 0;
+        }
+
+        if (maze[ghost.y + y][ghost.x + x] != ' ') continue;
+        ghost.x += x;
+        ghost.y += y;
+        move_cursor(pacman_wnd, ghost.x, ghost.y);
+        wait(250);
+    }
 }
 
     
-
-
 void init_pacman(WINDOW* wnd, int num_ghosts)
 {
     pacman_wnd = wnd;

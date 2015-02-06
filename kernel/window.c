@@ -69,7 +69,7 @@ void scroll_window(WINDOW* wnd, int lines)
 
 void output_char(WINDOW* wnd, unsigned char c)
 {
-	int write = 0;
+	int write = 1;
 	WORD *cl;
 	int cursor_new_x = wnd->cursor_x;
 	int cursor_new_y = wnd->cursor_y;
@@ -79,14 +79,16 @@ void output_char(WINDOW* wnd, unsigned char c)
 		case '\r':
 			cursor_new_x = 0;
 			cursor_new_y++;
+			write = 0;
 			break;
 		case '\t':
-			while(++cursor_new_x % TAB_SIZE != 0);
+			cursor_new_x += TAB_SIZE - cursor_new_x % TAB_SIZE;
 			if (cursor_new_x >= wnd->width)
 			{
 				cursor_new_x = 0;
 				cursor_new_y++;
 			}
+			write = 0;
 			break;
 		default:
 			cursor_new_x++;
@@ -95,7 +97,6 @@ void output_char(WINDOW* wnd, unsigned char c)
 				cursor_new_x = 0;
 				cursor_new_y++;
 			}
-			write = 1;
 			break;
 	}
 

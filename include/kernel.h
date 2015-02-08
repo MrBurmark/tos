@@ -41,6 +41,8 @@ LONG peek_l(MEM_ADDR addr);
 
 /*=====>>> window.c <<<=====================================================*/
 
+#define TAB_SIZE 4
+
 typedef struct {
   int  x, y;
   int  width, height;

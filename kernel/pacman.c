@@ -128,7 +128,7 @@ void init_ghost(GHOST* ghost)
 void wait(unsigned int n)
 {
     unsigned int i;
-    n *= 10;
+    n *= 1;
     for(i=0; i < n; i++) ;
 }
 
@@ -140,9 +140,9 @@ void create_new_ghost()
     init_ghost(&ghost);
     while(1)
     {
-        x = random() % 4 - 1;
+        x = (random() % 4) - 1;
         y = 0;
-        if (x % 2 == 0)
+        if ((x % 2) == 0)
         {
             y = x - 1;
             x = 0;

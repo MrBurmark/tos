@@ -2,7 +2,6 @@
 #include <kernel.h>
 
 
-#define TAB_SIZE 4
 #define WINDOW_BASE_ADDR 0xB8000
 #define WINDOW_TOTAL_WIDTH 80
 #define WINDOW_TOTAL_HEIGHT 25

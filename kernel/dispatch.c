@@ -24,8 +24,23 @@ PCB *ready_queue [MAX_READY_QUEUES];
 
 void add_ready_queue (PROCESS proc)
 {
+	PROCESS head, last;
+	head = ready_queue[proc->priority];
+	if(head != NULL)
+	{
+		last = head->prev;
+		last->next = proc;
+		head->prev = proc;
+		proc->next = head;
+		proc->prev = last;
+	}
+	else
+	{
+		ready_queue[proc->priority] = proc;
+		proc->next = proc;
+		proc->prev = proc;
+	}
 }
-
 
 
 /*
@@ -37,6 +52,23 @@ void add_ready_queue (PROCESS proc)
 
 void remove_ready_queue (PROCESS proc)
 {
+	assert(ready_queue[proc->priority] != NULL);
+
+	if(proc->next == proc) /* proc only process in queue */
+	{
+		ready_queue[proc->priority] = NULL;
+	}
+	else /* multiple processes in queue */
+	{
+		if (ready_queue[proc->priority] == proc) /* proc at head of queue */
+		{
+			ready_queue[proc->priority] = proc->next;
+		}
+		proc->next->prev = proc->prev;
+		proc->prev->next = proc->next;
+	}
+	proc->next = NULL;
+	proc->prev = NULL;
 }
 
 
@@ -51,6 +83,16 @@ void remove_ready_queue (PROCESS proc)
 
 PROCESS dispatcher()
 {
+	int prio;
+	for(prio = 7; prio >= 0; prio--)
+	{
+		if(ready_queue[prio] != NULL)
+		{
+			return (prio > active_proc->priority) ? ready_queue[prio] : active_proc->next;
+		}
+	}
+	assert(0);
+	return (PROCESS) NULL;
 }
 
 
@@ -77,4 +119,15 @@ void resign()
 
 void init_dispatcher()
 {
+	PROCESS *rq, *end;
+
+	/* initialize all slots in ready queue to NULL */
+	end = ready_queue + MAX_READY_QUEUES;
+	for(rq = ready_queue; rq < end; rq++)
+	{
+		*rq = (PROCESS)NULL;
+	}
+
+	/* add initial/null process to ready queue */
+	ready_queue[1] = pcb;
 }

@@ -71,7 +71,7 @@ void print_process(WINDOW* wnd, PROCESS p)
 {
 	/* relies on order of states given in kernel.h */
 	char state[16*6] = "READY          \0SEND_BLOCKED   \0REPLY_BLOCKED  \0RECEIVE_BLOCKED\0MESSAGE_BLOCKED\0INTR_BLOCKED   ";
-	wprintf(wnd, "%s\t%s\t%d\t%s\n", &state[0] + p->state * 16, (active_proc == p) ? "*     " : "      ", p->priority, p->name);
+	wprintf(wnd, "%s\t%s\t%4d\t%s\n", &state[0] + p->state * 16, (active_proc == p) ? "*     " : "      ", p->priority, p->name);
 }
 
 void print_all_processes(WINDOW* wnd)

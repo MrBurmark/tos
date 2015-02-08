@@ -156,6 +156,11 @@ void create_new_ghost()
     }
 }
 
+void ghost_proc(PROCESS self, PARAM param)
+{
+    create_new_ghost();
+}
+
     
 void init_pacman(WINDOW* wnd, int num_ghosts)
 {
@@ -168,6 +173,6 @@ void init_pacman(WINDOW* wnd, int num_ghosts)
 
     int j;
     for (j = 0; j < num_ghosts; j++)
-        create_new_ghost();
+        create_process(ghost_proc, 3, 0, "Ghost");
 }
 

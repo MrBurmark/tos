@@ -25,6 +25,7 @@ PCB *ready_queue [MAX_READY_QUEUES];
 void add_ready_queue (PROCESS proc)
 {
 	PROCESS head, last;
+	assert(proc->magic == MAGIC_PCB);
 	head = ready_queue[proc->priority];
 	if(head != NULL)
 	{
@@ -52,7 +53,7 @@ void add_ready_queue (PROCESS proc)
 
 void remove_ready_queue (PROCESS proc)
 {
-	assert(ready_queue[proc->priority] != NULL);
+	assert(ready_queue[proc->priority] != NULL && proc->magic == MAGIC_PCB);
 
 	if(proc->next == proc) /* proc only process in queue */
 	{
@@ -129,5 +130,5 @@ void init_dispatcher()
 	}
 
 	/* add initial/null process to ready queue */
-	ready_queue[1] = pcb;
+	add_ready_queue(active_proc);
 }

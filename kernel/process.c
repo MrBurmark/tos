@@ -108,6 +108,7 @@ void init_process()
 	end = pcb + MAX_PROCS;
 	for (proc = pcb; proc < end; proc++)
 	{
+		proc->magic = ~MAGIC_PCB;
 		proc->used = FALSE;
 	}
 
@@ -118,8 +119,6 @@ void init_process()
 	pcb->priority = 1;
 	pcb->first_port = NULL;
 	pcb->name = "Boot process";
-	pcb->next = pcb;
-	pcb->prev = pcb;
 
 	/* initialize active process to initial/null process */
 	active_proc = pcb;

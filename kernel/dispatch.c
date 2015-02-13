@@ -24,16 +24,15 @@ PCB *ready_queue [MAX_READY_QUEUES];
 
 void add_ready_queue (PROCESS proc)
 {
-	PROCESS head, last;
+	PROCESS head;
 	assert(proc->magic == MAGIC_PCB);
 	head = ready_queue[proc->priority];
 	if(head != NULL)
 	{
-		last = head->prev;
-		last->next = proc;
-		head->prev = proc;
 		proc->next = head;
-		proc->prev = last;
+		proc->prev = head->prev;
+		head->prev->next = proc;
+		head->prev = proc;
 	}
 	else
 	{
@@ -41,6 +40,7 @@ void add_ready_queue (PROCESS proc)
 		proc->next = proc;
 		proc->prev = proc;
 	}
+	proc->state = STATE_READY;
 }
 
 
@@ -61,15 +61,12 @@ void remove_ready_queue (PROCESS proc)
 	}
 	else /* multiple processes in queue */
 	{
-		if (ready_queue[proc->priority] == proc) /* proc at head of queue */
-		{
-			ready_queue[proc->priority] = proc->next;
-		}
+		ready_queue[proc->priority] = proc->next;
 		proc->next->prev = proc->prev;
 		proc->prev->next = proc->next;
 	}
-	proc->next = NULL;
-	proc->prev = NULL;
+	// proc->next = NULL;
+	// proc->prev = NULL;
 }
 
 
@@ -85,11 +82,19 @@ void remove_ready_queue (PROCESS proc)
 PROCESS dispatcher()
 {
 	int prio;
-	for(prio = 7; prio >= 0; prio--)
+	for(prio = MAX_READY_QUEUES - 1; prio >= 0; prio--)
 	{
-		if(ready_queue[prio] != NULL)
+		if(ready_queue[prio] == NULL)
 		{
-			return (prio > active_proc->priority) ? ready_queue[prio] : active_proc->next;
+			continue;
+		}
+		else if(prio == active_proc->priority)
+		{
+			return active_proc->next;
+		} 
+		else
+		{
+			return ready_queue[prio];
 		}
 	}
 	assert(0);
@@ -108,6 +113,29 @@ PROCESS dispatcher()
  */
 void resign()
 {
+	asm("pushl %%eax;"
+		"pushl %%ecx;"
+		"pushl %%edx;"
+		"pushl %%ebx;"
+		"pushl %%ebp;"
+		"pushl %%esi;"
+		"pushl %%edi;"
+		"movl %%esp, %0"
+		: "=r" (active_proc->esp)
+		:
+		);
+	active_proc = dispatcher();
+	asm("movl %0, %%esp;"
+		"popl %%edi;"
+		"popl %%esi;"
+		"popl %%ebp;"
+		"popl %%ebx;"
+		"popl %%edx;"
+		"popl %%ecx;"
+		"popl %%eax"
+		: 
+		: "r" (active_proc->esp)
+		);
 }
 
 

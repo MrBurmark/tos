@@ -165,6 +165,7 @@ typedef struct _PORT_DEF {
     struct _PORT_DEF *next;            /* Next port */
 } PORT_DEF;
 
+extern PORT_DEF port[];
 
 PORT create_port();
 PORT create_new_port (PROCESS proc);

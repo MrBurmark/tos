@@ -75,7 +75,7 @@ PORT create_process (void (*ptr_to_new_proc) (PROCESS, PARAM),
 	add_ready_queue(proc);
 
 	/* return NULL pointer */
-	return (PORT) NULL;
+	return create_new_port(proc);
 }
 
 
@@ -138,7 +138,7 @@ void init_process()
 	pcb->state 		= STATE_READY;
 	pcb->priority 	= 1;
 	pcb->first_port = NULL;
-	pcb->name 		= "Boot process";
+	pcb->name 		= boot_name;
 
 	/* initialize active process to initial/null process */
 	active_proc = pcb;

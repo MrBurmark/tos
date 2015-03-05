@@ -136,6 +136,7 @@ void resign()
 		: 
 		: "r" (active_proc->esp)
 		);
+	/* implicit ret */
 }
 
 
@@ -152,6 +153,7 @@ void init_dispatcher()
 
 	/* initialize all slots in ready queue to NULL */
 	end = ready_queue + MAX_READY_QUEUES;
+	
 	for(rq = ready_queue; rq < end; rq++)
 	{
 		*rq = (PROCESS)NULL;

@@ -62,15 +62,14 @@ void add_to_blocked_list(PORT dest_port)
 	{
 		/* Empty list */
 		dest_port->blocked_list_head = active_proc;
-		dest_port->blocked_list_tail = active_proc;
-		active_proc->next_blocked = NULL;
 	}
 	else
 	{
 		/* Add to tail of existing list */
 		dest_port->blocked_list_tail->next_blocked = active_proc;
-		dest_port->blocked_list_tail = active_proc;
 	}
+	dest_port->blocked_list_tail = active_proc;
+	active_proc->next_blocked = NULL;
 }
 
 
@@ -92,6 +91,7 @@ void send (PORT dest_port, void* data)
 	{
 		/* Must wait for receive */
 		/* Store data to own PCB */
+		active_proc->param_proc = active_proc;
 		active_proc->param_data = data;
 
 		add_to_blocked_list(dest_port);
@@ -120,6 +120,7 @@ void message (PORT dest_port, void* data)
 	{
 		/* Must wait for receive */
 		/* Store data to own PCB */
+		active_proc->param_proc = active_proc;
 		active_proc->param_data = data;
 
 		add_to_blocked_list(dest_port);
@@ -131,7 +132,7 @@ void message (PORT dest_port, void* data)
 }
 
 
-PROCESS pop_message()
+PROCESS pop_message( void )
 {
 	PROCESS sender = NULL;
 
@@ -184,8 +185,8 @@ void* receive (PROCESS* sender)
 	else
 	{
 		/* Wait for a message */
-		active_proc->state = STATE_RECEIVE_BLOCKED;
 		remove_ready_queue(active_proc);
+		active_proc->state = STATE_RECEIVE_BLOCKED;
 		resign();
 		/* Message received */
 		/* data in own PCB */

@@ -200,9 +200,13 @@ void* receive (PROCESS* sender)
 
 void reply (PROCESS sender)
 {
-	/* put sender back on ready queue */
-	sender->state = STATE_READY;
-	add_ready_queue(sender);
+	
+	if (sender->state == STATE_REPLY_BLOCKED)
+	{
+		/* put sender back on ready queue */
+		sender->state = STATE_READY;
+		add_ready_queue(sender);
+	}
 	resign();
 }
 

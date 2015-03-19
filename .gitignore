@@ -1,5 +1,7 @@
 bochsout.txt
 *disk_image
+*.bin
+*.jar
 *.save
 *.img
 *.o

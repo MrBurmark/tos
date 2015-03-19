@@ -1,3 +1,8 @@
+bochsout.txt
+*disk_image
+*.save
+*.img
+*.o
 *.tmp
 *.sublime*
 

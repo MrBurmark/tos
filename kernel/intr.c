@@ -26,6 +26,17 @@ void load_idt (IDT* base)
 
 void init_idt_entry (int intr_no, void (*isr) (void))
 {
+    IDT *i = idt + intr_no;
+
+    i->offset_0_15  = (unsigned short)(unsigned int)isr;
+    i->selector     = CODE_SELECTOR;
+    i->dword_count  = 0;
+    i->unused       = 0;
+    i->type         = 0xe;
+    i->dt           = 0;
+    i->dpl          = 0;
+    i->p            = 1;
+    i->offset_16_31 = (unsigned short)(((unsigned int)isr) >> 16);
 }
 
 
@@ -108,6 +119,92 @@ void dummy_isr_keyb()
     asm ("iret");
 }
 
+/*
+ * Panic ISR
+ */
+void isr_panic();
+void dummy_isr_panic()
+{
+    /*
+     *  PUSHL   %EAX        ; Save process' context
+     *  PUSHL   %ECX
+     *  PUSHL   %EDX
+     *  PUSHL   %EBX
+     *  PUSHL   %EBP
+     *  PUSHL   %ESI
+     *  PUSHL   %EDI
+     */
+    asm ("isr_panic:");
+    asm ("pushl %eax;pushl %ecx;pushl %edx");
+    asm ("pushl %ebx;pushl %ebp;pushl %esi;pushl %edi");
+
+    /* Save the context pointer ESP to the PCB */
+    asm ("movl %%esp,%0" : "=m" (active_proc->esp) : );
+
+    // print_all_processes(kernel_window);
+    // kprintf ("service_intr_0x0-0xf: Panic interrupt");
+    // while(1);
+
+    /* Restore context pointer ESP */
+    asm ("movl %0,%%esp" : : "m" (active_proc->esp) );
+
+    /*
+     *  MOVB  $0x20,%AL ; Reset interrupt controller
+     *  OUTB  %AL,$0x20
+     *  POPL  %EDI      ; Restore previously saved context
+     *  POPL  %ESI
+     *  POPL  %EBP
+     *  POPL  %EBX
+     *  POPL  %EDX
+     *  POPL  %ECX
+     *  POPL  %EAX
+     *  IRET        ; Return to new process
+     */
+    asm ("movb $0x20,%al;outb %al,$0x20");
+    asm ("popl %edi;popl %esi;popl %ebp;popl %ebx");
+    asm ("popl %edx;popl %ecx;popl %eax");
+    asm ("iret");
+}
+
+/*
+ * Default ISR
+ */
+void isr_default();
+void dummy_isr_default()
+{
+    /*
+     *  PUSHL   %EAX        ; Save process' context
+     *  PUSHL   %ECX
+     *  PUSHL   %EDX
+     *  PUSHL   %EBX
+     *  PUSHL   %EBP
+     *  PUSHL   %ESI
+     *  PUSHL   %EDI
+     */
+    asm ("isr_default:");
+    asm ("pushl %eax;pushl %ecx;pushl %edx");
+    asm ("pushl %ebx;pushl %ebp;pushl %esi;pushl %edi");
+
+    /* do nothing */
+
+    /*
+     *  MOVB  $0x20,%AL ; Reset interrupt controller
+     *  OUTB  %AL,$0x20
+     *  POPL  %EDI      ; Restore previously saved context
+     *  POPL  %ESI
+     *  POPL  %EBP
+     *  POPL  %EBX
+     *  POPL  %EDX
+     *  POPL  %ECX
+     *  POPL  %EAX
+     *  IRET        ; Return to new process
+     */
+    asm ("movb $0x20,%al;outb %al,$0x20");
+    asm ("popl %edi;popl %esi;popl %ebp;popl %ebx");
+    asm ("popl %edx;popl %ecx;popl %eax");
+    asm ("iret");
+}
+
 void wait_for_interrupt (int intr_no)
 {
 }
@@ -147,4 +244,22 @@ void re_program_interrupt_controller ()
 
 void init_interrupts()
 {
+    int i;
+
+    for(i = 0; i < 16; i++)
+    {
+        init_idt_entry(i, isr_panic);
+    }
+    for(; i < MAX_INTERRUPTS; i++)
+    {
+        init_idt_entry(i, isr_default);
+    }
+
+    load_idt(idt);
+
+    re_program_interrupt_controller();
+
+    interrupts_initialized = TRUE;
+
+    asm("sti");
 }

@@ -1,5 +1,11 @@
 bochsout.txt
 *disk_image
+*fatcopy
+*fatdel
+*fatdir
+*fatformat
+*fatmd
+*fatsys
 *.bin
 *.jar
 *.save

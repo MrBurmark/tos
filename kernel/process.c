@@ -14,8 +14,12 @@ PORT create_process (void (*ptr_to_new_proc) (PROCESS, PARAM),
 		     char *name)
 {
 	MEM_ADDR esp;
+	PORT prt;
 	PROCESS proc;
 	PROCESS end = pcb + MAX_PROCS;
+
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
 
 	assert(prio < MAX_READY_QUEUES && prio >= 0);
 
@@ -50,6 +54,12 @@ PORT create_process (void (*ptr_to_new_proc) (PROCESS, PARAM),
 	esp -= 4; /* return address, dummy arg */
 	poke_l(esp, (LONG)NULL);
 
+	esp -= 4; /* EFLAGS */
+	poke_l(esp, interrupts_initialized ? 0x200 : 0);
+
+	esp -= 4; /* CS */
+	poke_l(esp, 0x8);
+
 	esp -= 4; /* func, EIP */
 	poke_l(esp, (LONG)ptr_to_new_proc);
 	
@@ -74,8 +84,13 @@ PORT create_process (void (*ptr_to_new_proc) (PROCESS, PARAM),
 	/* add process to ready queue */
 	add_ready_queue(proc);
 
-	/* return NULL pointer */
-	return create_new_port(proc);
+	/* allocate new port */
+	prt = create_new_port(proc);
+
+	ENABLE_INTR(saved_if);
+
+	/* return port */
+	return prt;
 }
 
 
@@ -98,6 +113,9 @@ void print_all_processes(WINDOW* wnd)
 {
 	PROCESS proc, end;
 
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
+
 	/* ensure cursor at start of new line */
 	if (wnd->cursor_x != 0)
 	{
@@ -117,6 +135,8 @@ void print_all_processes(WINDOW* wnd)
 			print_process(wnd, proc);
 		}
 	}
+
+	ENABLE_INTR(saved_if); 
 }
 
 

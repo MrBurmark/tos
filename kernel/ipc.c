@@ -15,6 +15,9 @@ PORT create_new_port (PROCESS owner)
 {
 	PORT p, end;
 
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
+
 	/* allocate unused port */
 	end = port + MAX_PORTS;
 	for (p = port; p < end; p++)
@@ -39,6 +42,8 @@ PORT create_new_port (PROCESS owner)
     p->next 			= owner->first_port;
     owner->first_port 	= p;
 
+	ENABLE_INTR(saved_if); 
+
 	return p;
 }
 
@@ -55,6 +60,7 @@ void close_port (PORT port)
 	assert(port->magic == MAGIC_PORT);
 	port->open = FALSE;
 }
+
 
 void add_to_blocked_list(PORT dest_port)
 {
@@ -75,6 +81,9 @@ void add_to_blocked_list(PORT dest_port)
 
 void send (PORT dest_port, void* data)
 {
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
+
 	assert(dest_port->magic == MAGIC_PORT);
 
 	if(dest_port->open && dest_port->owner->state == STATE_RECEIVE_BLOCKED)
@@ -83,7 +92,6 @@ void send (PORT dest_port, void* data)
 		/* store data in dest PCB */
 		dest_port->owner->param_proc = active_proc;
 		dest_port->owner->param_data = data;
-		dest_port->owner->state = STATE_READY;
 		active_proc->state = STATE_REPLY_BLOCKED;
 		add_ready_queue(dest_port->owner);
 	}
@@ -99,12 +107,18 @@ void send (PORT dest_port, void* data)
 		active_proc->state = STATE_SEND_BLOCKED;
 	}
 	remove_ready_queue(active_proc);
+
+	ENABLE_INTR(saved_if);
+
 	resign();
 }
 
 
 void message (PORT dest_port, void* data)
 {
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
+
 	assert(dest_port->magic == MAGIC_PORT);
 
 	if(dest_port->open && dest_port->owner->state == STATE_RECEIVE_BLOCKED)
@@ -113,7 +127,6 @@ void message (PORT dest_port, void* data)
 		/* store data in dest PCB */
 		dest_port->owner->param_proc = active_proc;
 		dest_port->owner->param_data = data;
-		dest_port->owner->state = STATE_READY;
 		add_ready_queue(dest_port->owner);
 	}
 	else
@@ -125,9 +138,12 @@ void message (PORT dest_port, void* data)
 
 		add_to_blocked_list(dest_port);
 
-		active_proc->state = STATE_MESSAGE_BLOCKED;
 		remove_ready_queue(active_proc);
+		active_proc->state = STATE_MESSAGE_BLOCKED;
 	}
+
+	ENABLE_INTR(saved_if);
+
 	resign();
 }
 
@@ -135,6 +151,9 @@ void message (PORT dest_port, void* data)
 PROCESS pop_message( void )
 {
 	PROCESS sender = NULL;
+
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
 
 	/* Find first message waiting */
 	PORT p = active_proc->first_port;
@@ -155,6 +174,9 @@ PROCESS pop_message( void )
 		}
 		p = p->next;
 	}
+
+	ENABLE_INTR(saved_if);
+
 	return sender;
 }
 
@@ -174,7 +196,6 @@ void* receive (PROCESS* sender)
 
 		if((*sender)->state == STATE_MESSAGE_BLOCKED)
 		{
-			(*sender)->state = STATE_READY;
 			add_ready_queue(*sender);
 		}
 		else if((*sender)->state == STATE_SEND_BLOCKED)
@@ -204,7 +225,6 @@ void reply (PROCESS sender)
 	if (sender->state == STATE_REPLY_BLOCKED)
 	{
 		/* put sender back on ready queue */
-		sender->state = STATE_READY;
 		add_ready_queue(sender);
 	}
 	resign();

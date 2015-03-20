@@ -28,7 +28,7 @@ void init_idt_entry (int intr_no, void (*isr) (void))
 {
     IDT *i = idt + intr_no;
 
-    i->offset_0_15  = (unsigned short)(unsigned int)isr;
+    i->offset_0_15  = (unsigned int)isr & 0xffff;
     i->selector     = CODE_SELECTOR;
     i->dword_count  = 0;
     i->unused       = 0;
@@ -36,9 +36,8 @@ void init_idt_entry (int intr_no, void (*isr) (void))
     i->dt           = 0;
     i->dpl          = 0;
     i->p            = 1;
-    i->offset_16_31 = (unsigned short)(((unsigned int)isr) >> 16);
+    i->offset_16_31 = ((unsigned int)isr >> 16) & 0xffff;
 }
-
 
 
 
@@ -48,6 +47,43 @@ void init_idt_entry (int intr_no, void (*isr) (void))
 void isr_timer ();
 void dummy_isr_timer ()
 {
+    /*
+     *  PUSHL   %EAX        ; Save process' context
+     *  PUSHL   %ECX
+     *  PUSHL   %EDX
+     *  PUSHL   %EBX
+     *  PUSHL   %EBP
+     *  PUSHL   %ESI
+     *  PUSHL   %EDI
+     */
+    asm ("isr_timer:");
+    asm ("pushl %eax;pushl %ecx;pushl %edx");
+    asm ("pushl %ebx;pushl %ebp;pushl %esi;pushl %edi");
+
+    /* Save the context pointer ESP to the PCB */
+    asm ("movl %%esp,%0" : "=m" (active_proc->esp) : );
+
+    active_proc = dispatcher();
+
+    /* Restore context pointer ESP */
+    asm ("movl %0,%%esp" : : "m" (active_proc->esp) );
+
+    /*
+     *  MOVB  $0x20,%AL ; Reset interrupt controller
+     *  OUTB  %AL,$0x20
+     *  POPL  %EDI      ; Restore previously saved context
+     *  POPL  %ESI
+     *  POPL  %EBP
+     *  POPL  %EBX
+     *  POPL  %EDX
+     *  POPL  %ECX
+     *  POPL  %EAX
+     *  IRET        ; Return to new process
+     */
+    asm ("movb $0x20,%al;outb %al,$0x20");
+    asm ("popl %edi;popl %esi;popl %ebp;popl %ebx");
+    asm ("popl %edx;popl %ecx;popl %eax");
+    asm ("iret");
 }
 
 
@@ -141,9 +177,9 @@ void dummy_isr_panic()
     /* Save the context pointer ESP to the PCB */
     asm ("movl %%esp,%0" : "=m" (active_proc->esp) : );
 
-    // print_all_processes(kernel_window);
-    // kprintf ("service_intr_0x0-0xf: Panic interrupt");
-    // while(1);
+    print_all_processes(kernel_window);
+    kprintf ("service_intr_0x0-0xf: Panic interrupt!");
+    while(1);
 
     /* Restore context pointer ESP */
     asm ("movl %0,%%esp" : : "m" (active_proc->esp) );
@@ -254,6 +290,13 @@ void init_interrupts()
     {
         init_idt_entry(i, isr_default);
     }
+
+    init_idt_entry(TIMER_IRQ, isr_timer);
+
+    // for(i = 0; i < MAX_INTERRUPTS; i++)
+    // {
+    //     init_idt_entry(i, isr_default);
+    // }
 
     load_idt(idt);
 

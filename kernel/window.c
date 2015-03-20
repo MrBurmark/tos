@@ -117,10 +117,15 @@ void output_char(WINDOW* wnd, unsigned char c)
 
 void output_string(WINDOW* wnd, const char *str)
 {
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
+	
 	while(*str != '\0')
 	{
 		output_char(wnd, *str++);
 	}
+	
+	ENABLE_INTR(saved_if); 
 }
 
 

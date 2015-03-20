@@ -25,6 +25,9 @@ PCB *ready_queue [MAX_READY_QUEUES];
 void add_ready_queue (PROCESS proc)
 {
 	PROCESS head;
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
+
 	assert(proc->magic == MAGIC_PCB);
 	head = ready_queue[proc->priority];
 	if(head != NULL)
@@ -41,6 +44,8 @@ void add_ready_queue (PROCESS proc)
 		proc->prev = proc;
 	}
 	proc->state = STATE_READY;
+
+	ENABLE_INTR(saved_if); 
 }
 
 
@@ -53,6 +58,9 @@ void add_ready_queue (PROCESS proc)
 
 void remove_ready_queue (PROCESS proc)
 {
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
+
 	assert(ready_queue[proc->priority] != NULL && proc->magic == MAGIC_PCB);
 
 	if(proc->next == proc) /* proc only process in queue */
@@ -67,6 +75,8 @@ void remove_ready_queue (PROCESS proc)
 	}
 	// proc->next = NULL;
 	// proc->prev = NULL;
+
+	ENABLE_INTR(saved_if);
 }
 
 
@@ -82,6 +92,9 @@ void remove_ready_queue (PROCESS proc)
 PROCESS dispatcher()
 {
 	int prio;
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
+
 	for(prio = MAX_READY_QUEUES - 1; prio >= 0; prio--)
 	{
 		if(ready_queue[prio] == NULL)
@@ -90,14 +103,17 @@ PROCESS dispatcher()
 		}
 		else if(prio == active_proc->priority)
 		{
+			ENABLE_INTR(saved_if); 
 			return active_proc->next;
 		} 
 		else
 		{
+			ENABLE_INTR(saved_if); 
 			return ready_queue[prio];
 		}
 	}
 	assert(0);
+	ENABLE_INTR(saved_if); 
 	return (PROCESS) NULL;
 }
 
@@ -113,7 +129,13 @@ PROCESS dispatcher()
  */
 void resign()
 {
-	asm("pushl %%eax;"
+	asm("pushfl;"
+		"cli;"
+		"popl %%eax;"
+		"xchg (%%esp), %%eax;"
+		"pushl %%cs;"
+		"pushl %%eax;"
+		"pushl %%eax;"
 		"pushl %%ecx;"
 		"pushl %%edx;"
 		"pushl %%ebx;"
@@ -132,7 +154,8 @@ void resign()
 		"popl %%ebx;"
 		"popl %%edx;"
 		"popl %%ecx;"
-		"popl %%eax"
+		"popl %%eax;"
+		"iret"
 		: 
 		: "r" (active_proc->esp)
 		);

@@ -42,6 +42,10 @@ LONG peek_l(MEM_ADDR addr);
 /*=====>>> window.c <<<=====================================================*/
 
 #define TAB_SIZE 4
+#define WINDOW_BASE_ADDR 0xB8000
+#define WINDOW_TOTAL_WIDTH 80
+#define WINDOW_TOTAL_HEIGHT 25
+#define WINDOW_OFFSET(in_wnd, in_x, in_y) (((in_wnd)->y + (in_y)) * WINDOW_TOTAL_WIDTH + ((in_wnd)->x + (in_x)))
 
 typedef struct {
   int  x, y;

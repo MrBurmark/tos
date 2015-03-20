@@ -2,39 +2,51 @@
 #include <kernel.h>
 
 
-#define WINDOW_BASE_ADDR 0xB8000
-#define WINDOW_TOTAL_WIDTH 80
-#define WINDOW_TOTAL_HEIGHT 25
-#define WINDOW_OFFSET(in_wnd, in_x, in_y) (((in_wnd)->y + (in_y)) * WINDOW_TOTAL_WIDTH + ((in_wnd)->x + (in_x)))
-
-
-/* sets the currect cursor laction to black */
+/* sets the currect cursor location to black */
 void move_cursor(WINDOW* wnd, int x, int y)
 {
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
+	
 	assert(x >= 0 && y >= 0 && x < wnd->width && y < wnd->height);
 	remove_cursor(wnd);
 	wnd->cursor_x = x;
 	wnd->cursor_y = y;
 	show_cursor(wnd);
+
+	ENABLE_INTR(saved_if); 
 }
 
 
 void remove_cursor(WINDOW* wnd)
 {
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
+
 	WORD *cl = (WORD*)WINDOW_BASE_ADDR + WINDOW_OFFSET(wnd, wnd->cursor_x, wnd->cursor_y);
 	poke_w((MEM_ADDR)cl, ' ' | 0x0F00);
+
+	ENABLE_INTR(saved_if); 
 }
 
 
 void show_cursor(WINDOW* wnd)
 {
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
+
 	WORD *cl = (WORD*)WINDOW_BASE_ADDR + WINDOW_OFFSET(wnd, wnd->cursor_x, wnd->cursor_y);
 	poke_w((MEM_ADDR)cl, wnd->cursor_char | 0x0F00);
+
+	ENABLE_INTR(saved_if); 
 }
 
 
 void clear_window(WINDOW* wnd)
 {
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
+
 	int offset_to_next_line = WINDOW_TOTAL_WIDTH - wnd->width;
 	WORD *h_end, *w_end;
 	WORD *cl = (WORD*)WINDOW_BASE_ADDR + WINDOW_OFFSET(wnd, 0, 0);
@@ -46,6 +58,8 @@ void clear_window(WINDOW* wnd)
 		}
 	}
 	move_cursor(wnd, 0, 0);
+
+	ENABLE_INTR(saved_if);
 }
 
 /* scrolls the window up lines number of lines, also moving the cursor */
@@ -119,7 +133,7 @@ void output_string(WINDOW* wnd, const char *str)
 {
 	volatile int saved_if;
 	DISABLE_INTR(saved_if);
-	
+
 	while(*str != '\0')
 	{
 		output_char(wnd, *str++);

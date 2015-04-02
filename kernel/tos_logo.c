@@ -1,5 +1,6 @@
 
 #include <kernel.h>
+#include <tos_logo.h>
 
 void set_tos_colors(void)
 {

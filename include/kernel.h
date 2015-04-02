@@ -4,7 +4,6 @@
 
 #include <assert.h>
 #include <stdarg.h>
-#include <tos-logo.h>
 
 #define TRUE	1
 #define FALSE	0
@@ -291,7 +290,7 @@ void init_pacman(WINDOW* wnd, int num_ghosts);
 
 /*=====>>> vga.c <<<=====================================================*/
 
-int init_graph_vga(int width, int height,int chain4);
+int init_graph_vga();
 
 /*=====>>> tos_logo.c <<<================================================*/
 

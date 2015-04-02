@@ -25,7 +25,7 @@ void kernel_main()
     // init_shell();
     // init_pacman(kernel_window, 3);
 
-    assert( init_graph_vga(320,200,1));
+    assert( init_graph_vga());
 
     // blank screen
     for(window = (unsigned char *)0xA0000; window < (unsigned char *)(0xA0000 + 320*200); window++)

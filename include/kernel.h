@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <stdarg.h>
+#include <tos-logo.h>
 
 #define TRUE	1
 #define FALSE	0
@@ -287,5 +288,19 @@ void set_train_speed(char* speed);
 /*=====>>> pacman.c <<<==================================================*/
 
 void init_pacman(WINDOW* wnd, int num_ghosts);
+
+/*=====>>> vga.c <<<=====================================================*/
+
+int init_graph_vga(int width, int height,int chain4);
+
+/*=====>>> tos_logo.c <<<================================================*/
+
+void set_tos_colors();
+void draw_tos_logo();
+
+extern unsigned char header_data[];
+extern unsigned int tos_logo_width;
+extern unsigned int tos_logo_height;
+extern unsigned char header_data_cmap[256][3];
 
 #endif

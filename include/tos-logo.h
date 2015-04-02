@@ -1,3 +1,6 @@
+#ifndef __TOS_LOGO__
+#define __TOS_LOGO__
+
 /*  GIMP header image file format (INDEXED): /home/jburmark/Downloads/tos-logo.h  */
 
 static unsigned int tos_logo_width = 125;
@@ -791,3 +794,5 @@ static unsigned char header_data[] = {
 	238,238,238,238,238,238,238,238,238,238,0,0,0,238,238,238,
 	238,238,238,238,238,238,238,238,238,238,238,238,238
 	};
+
+#endif

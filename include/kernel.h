@@ -238,6 +238,8 @@ void init_timer();
 
 unsigned char inportb (unsigned short port);
 void outportb (unsigned short port, unsigned char value);
+unsigned short inportw (unsigned short port);
+void outportw (unsigned short port, unsigned short value);
 
 
 /*=====>>> com.c <<<=====================================================*/

@@ -25,8 +25,8 @@ void kernel_main()
     init_timer();
     // init_com();
     init_keyb();
-    // init_shell();
-    init_pacman(&pacman_window_def, 3);
+    init_shell();
+    // init_pacman(&pacman_window_def, 3);
 
     // assert( init_graph_vga());
 

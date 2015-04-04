@@ -415,8 +415,6 @@ void wprintf(WINDOW* wnd, const char *fmt, ...)
 }
 
 
-
-/////////////////////////////////////////////////////////////////////////////////
 static WINDOW kernel_window_def = {0, 0, 80, 25, 0, 0, ' '};
 WINDOW* kernel_window = &kernel_window_def;
 

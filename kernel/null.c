@@ -1,7 +1,8 @@
 
 #include <kernel.h>
 
-static WINDOW null_window_def = {0, 23, 80, 1, 0, 0, ' '};
+// determines location to print primes
+static WINDOW null_window_def = {0, 0, 80, 1, 0, 0, ' '};
 WINDOW* null_window = &null_window_def;
 
 

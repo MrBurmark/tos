@@ -97,7 +97,7 @@ void draw_maze()
 	}
 	y++;
     }
-    wprintf(pacman_wnd, "PacMan ");
+    // wprintf(pacman_wnd, "PacMan ");
 }
 
 
@@ -194,10 +194,16 @@ void ghost_proc(PROCESS self, PARAM param)
     
 void init_pacman(WINDOW* wnd, int num_ghosts)
 {
+    if (wnd->height < MAZE_HEIGHT || wnd->width < MAZE_WIDTH)
+    {
+        wprintf(wnd, "Window too small\n");
+        return;
+    }
+
     pacman_wnd = wnd;
-    pacman_wnd->width = MAZE_WIDTH;
-    pacman_wnd->height = MAZE_HEIGHT + 1;
-    pacman_wnd->cursor_char = GHOST_CHAR;
+    // pacman_wnd->width = MAZE_WIDTH;
+    // pacman_wnd->height = MAZE_HEIGHT + 1;
+    // pacman_wnd->cursor_char = GHOST_CHAR;
 
     draw_maze();
 

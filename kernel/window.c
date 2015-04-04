@@ -63,7 +63,9 @@ void clear_window(WINDOW* wnd)
 }
 
 /* scrolls the window up lines number of lines, also moving the cursor */
-void scroll_window(WINDOW* wnd, int lines)
+/* returns TRUE if scrolling would move the cursor off screen, FALSE otherwise */
+/* if cursor would move offscreen it is reset to position 0,0 */
+BOOL scroll_window(WINDOW* wnd, int lines)
 {
 	WORD *dst = (WORD*)WINDOW_BASE_ADDR + WINDOW_OFFSET(wnd, 0, 0);
 	WORD *src = dst + lines * WINDOW_TOTAL_WIDTH;
@@ -76,13 +78,26 @@ void scroll_window(WINDOW* wnd, int lines)
 	{
 		k_memset(dst, 0x00, wnd->width * sizeof(WORD));
 	}
-	move_cursor(wnd, wnd->cursor_x, wnd->cursor_y - lines);
+
+	if (wnd->cursor_y - lines >= 0)
+	{
+		move_cursor(wnd, wnd->cursor_x, wnd->cursor_y - lines);
+		return FALSE;
+	}
+	else
+	{
+		move_cursor(wnd, 0, 0);
+		return TRUE;
+	}
 }
 
 
 void output_char(WINDOW* wnd, unsigned char c)
 {
-	int write = 1;
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
+
+	int write = TRUE;
 	WORD *cl;
 	int cursor_new_x = wnd->cursor_x;
 	int cursor_new_y = wnd->cursor_y;
@@ -92,7 +107,7 @@ void output_char(WINDOW* wnd, unsigned char c)
 		case '\r':
 			cursor_new_x = 0;
 			cursor_new_y++;
-			write = 0;
+			write = FALSE;
 			break;
 		case '\t':
 			cursor_new_x += TAB_SIZE - cursor_new_x % TAB_SIZE;
@@ -101,7 +116,7 @@ void output_char(WINDOW* wnd, unsigned char c)
 				cursor_new_x = 0;
 				cursor_new_y++;
 			}
-			write = 0;
+			write = FALSE;
 			break;
 		default:
 			cursor_new_x++;
@@ -115,16 +130,21 @@ void output_char(WINDOW* wnd, unsigned char c)
 
 	if (cursor_new_y >= wnd->height)
 	{
-		scroll_window(wnd, cursor_new_y - wnd->height + 1);
+		write = !scroll_window(wnd, cursor_new_y - wnd->height + 1) && write;
 		cursor_new_y -= cursor_new_y - wnd->height + 1;
 	}
 	/* save current cursor address before move_cursor */
 	cl = (WORD*)WINDOW_BASE_ADDR + WINDOW_OFFSET(wnd, wnd->cursor_x, wnd->cursor_y);
 
+	// assert(cursor_new_x >= 0 && cursor_new_x < wnd->width && cursor_new_y >= 0 && cursor_new_y < wnd->height);
+	assert((LONG)cl >= WINDOW_BASE_ADDR && (LONG)cl < WINDOW_BASE_ADDR + 80*25*2);
+
 	move_cursor(wnd, cursor_new_x, cursor_new_y);
 	
 	if (write)
 		poke_w((MEM_ADDR)cl, c | 0x0F00);
+
+	ENABLE_INTR(saved_if); 
 }
 
 
@@ -380,6 +400,9 @@ void vsprintf(char *buf, const char *fmt, va_list argp)
 
 void wprintf(WINDOW* wnd, const char *fmt, ...)
 {
+	// volatile int saved_if;
+	// DISABLE_INTR(saved_if);
+	
     va_list	argp;
     char	buf[160];
 
@@ -387,17 +410,22 @@ void wprintf(WINDOW* wnd, const char *fmt, ...)
     vsprintf(buf, fmt, argp);
     output_string(wnd, buf);
     va_end(argp);
+
+    // ENABLE_INTR(saved_if); 
 }
 
 
 
-
+/////////////////////////////////////////////////////////////////////////////////
 static WINDOW kernel_window_def = {0, 0, 80, 25, 0, 0, ' '};
 WINDOW* kernel_window = &kernel_window_def;
 
 
 void kprintf(const char *fmt, ...)
 {
+	// volatile int saved_if;
+	// DISABLE_INTR(saved_if);
+
     va_list	  argp;
     char	  buf[160];
 
@@ -405,6 +433,8 @@ void kprintf(const char *fmt, ...)
     vsprintf(buf, fmt, argp);
     output_string(kernel_window, buf);
     va_end(argp);
+
+    // ENABLE_INTR(saved_if);
 }
 
 

@@ -28,7 +28,15 @@ void add_ready_queue (PROCESS proc)
 	volatile int saved_if;
 	DISABLE_INTR(saved_if);
 
+	// kprintf("add proc number %d to rq\n", proc - pcb);
+	// print_pcb(kernel_window, proc);
+	// print_all_processes(kernel_window);
+
+	assert(proc->used == TRUE);
 	assert(proc->magic == MAGIC_PCB);
+
+	// clear_window(kernel_window);
+
 	head = ready_queue[proc->priority];
 	if(head != NULL)
 	{
@@ -61,7 +69,7 @@ void remove_ready_queue (PROCESS proc)
 	volatile int saved_if;
 	DISABLE_INTR(saved_if);
 
-	assert(ready_queue[proc->priority] != NULL && proc->magic == MAGIC_PCB);
+	assert(proc->priority < 8 && ready_queue[proc->priority] != NULL && proc->magic == MAGIC_PCB);
 
 	if(proc->next == proc) /* proc only process in queue */
 	{
@@ -75,6 +83,9 @@ void remove_ready_queue (PROCESS proc)
 	}
 	// proc->next = NULL;
 	// proc->prev = NULL;
+
+	// kprintf("remove proc num %d from rq\n", proc - pcb);
+	// print_pcb(kernel_window, proc);
 
 	ENABLE_INTR(saved_if);
 }
@@ -183,5 +194,8 @@ void init_dispatcher()
 	}
 
 	/* add initial/null process to ready queue */
+
+	assert(active_proc->magic == MAGIC_PCB);
+
 	add_ready_queue(active_proc);
 }

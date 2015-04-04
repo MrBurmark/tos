@@ -129,6 +129,7 @@ PORT create_process(void (*new_proc) (PROCESS, PARAM),
 #ifdef XXX
 PROCESS fork();
 #endif
+void print_pcb(WINDOW* wnd, PROCESS p);
 void print_process(WINDOW* wnd, PROCESS p);
 void print_all_processes(WINDOW* wnd);
 void init_process();
@@ -230,7 +231,7 @@ typedef struct _Timer_Message
     int num_of_ticks;
 } Timer_Message;
 
-void sleep(int num_of_ticks);
+void sleep(int ticks);
 void init_timer();
 
 
@@ -296,10 +297,5 @@ int init_graph_vga();
 
 void set_tos_colors();
 void draw_tos_logo();
-
-extern unsigned char header_data[];
-extern unsigned int tos_logo_width;
-extern unsigned int tos_logo_height;
-extern unsigned char header_data_cmap[256][3];
 
 #endif

@@ -5,7 +5,7 @@
 #define MAZE_HEIGHT 16
 #define GHOST_CHAR  0x02
 
-unsigned int ghost_wait = 0x400000;
+unsigned int ghost_sleep = 0x38;
 
 typedef struct {
     int x;
@@ -181,7 +181,7 @@ void create_new_ghost()
     while(1)
     {
         move_ghost(&ghost);
-        wait(ghost_wait);
+        sleep(ghost_sleep);
     }
 }
 
@@ -198,7 +198,6 @@ void init_pacman(WINDOW* wnd, int num_ghosts)
     pacman_wnd->width = MAZE_WIDTH;
     pacman_wnd->height = MAZE_HEIGHT + 1;
     pacman_wnd->cursor_char = GHOST_CHAR;
-    ghost_wait /= num_ghosts;
 
     draw_maze();
 

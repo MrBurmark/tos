@@ -12,6 +12,7 @@
 // [ http://www.hut.fi/~jberlin ]
 // 
 // paired down to what we need only
+// 
 
 #define SZ(x) (sizeof(x)/sizeof(x[0]))
 
@@ -28,15 +29,7 @@ static const BYTE ver_regs  [] = { 0x6,  0x7,  0x9,  0x10, 0x11,
 static const BYTE height_200[] = { 0xbf, 0x1f, 0x41, 0x9c, 0x8e,
     0x8f, 0x96, 0xb9 };
 
-// the chain4 parameter should be 1 for normal 13h-type mode, but 
-// only allows 320x200 256x200, 256x240 and 256x256 because you
-// can only access the first 64kb
-
-// if chain4 is 0, then plane mode is used (tweaked modes), and
-// you'll need to switch planes to access the whole screen but
-// that allows you using any resolution, up to 400x600
-
-int init_graph_vga() 
+int init_graph_vga()
 // returns 1=ok, 0=fail
 {
     int i;

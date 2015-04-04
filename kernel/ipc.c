@@ -50,20 +50,33 @@ PORT create_new_port (PROCESS owner)
 
 void open_port (PORT port)
 {
+	// volatile int saved_if;
+	// DISABLE_INTR(saved_if);
+
 	assert(port->magic == MAGIC_PORT);
 	port->open = TRUE;
+
+	// ENABLE_INTR(saved_if);
 }
 
 
 void close_port (PORT port)
 {
+	// volatile int saved_if;
+	// DISABLE_INTR(saved_if);
+
 	assert(port->magic == MAGIC_PORT);
 	port->open = FALSE;
+
+	// ENABLE_INTR(saved_if);
 }
 
 
 void add_to_blocked_list(PORT dest_port)
 {
+	// volatile int saved_if;
+	// DISABLE_INTR(saved_if);
+
 	if(dest_port->blocked_list_tail == NULL)
 	{
 		/* Empty list */
@@ -76,6 +89,8 @@ void add_to_blocked_list(PORT dest_port)
 	}
 	dest_port->blocked_list_tail = active_proc;
 	active_proc->next_blocked = NULL;
+
+	// ENABLE_INTR(saved_if);
 }
 
 
@@ -185,6 +200,9 @@ void* receive (PROCESS* sender)
 {
 	void* mess = NULL;
 
+	// volatile int saved_if;
+	// DISABLE_INTR(saved_if);
+
 	/* take a message if one is waiting */
 	*sender = pop_message();
 
@@ -208,12 +226,18 @@ void* receive (PROCESS* sender)
 		/* Wait for a message */
 		remove_ready_queue(active_proc);
 		active_proc->state = STATE_RECEIVE_BLOCKED;
+
+		// ENABLE_INTR(saved_if);
 		resign();
+		// DISABLE_INTR(saved_if);
+
 		/* Message received */
 		/* data in own PCB */
 		mess = active_proc->param_data;
 		*sender = active_proc->param_proc;
 	}
+
+	// ENABLE_INTR(saved_if);
 
 	return mess;
 }
@@ -221,12 +245,17 @@ void* receive (PROCESS* sender)
 
 void reply (PROCESS sender)
 {
+	// volatile int saved_if;
+	// DISABLE_INTR(saved_if);
 	
 	if (sender->state == STATE_REPLY_BLOCKED)
 	{
 		/* put sender back on ready queue */
 		add_ready_queue(sender);
 	}
+
+	// ENABLE_INTR(saved_if);
+
 	resign();
 }
 

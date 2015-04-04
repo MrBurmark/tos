@@ -63,6 +63,24 @@ void dummy_isr_timer ()
     /* Save the context pointer ESP to the PCB */
     asm ("movl %%esp,%0" : "=m" (active_proc->esp) : );
 
+    p = interrupt_table[TIMER_IRQ];
+
+    if (p != NULL)
+    {
+        // kprintf("enter timer\n");
+        
+        if (p->state != STATE_INTR_BLOCKED) {
+            // kprintf("process number %d not INTR_BLOCKED", p - pcb);
+            // print_all_processes(kernel_window);
+            panic ("service_intr_0x60: No process waiting");
+        }
+        
+        /* Add event handler to ready queue */
+        add_ready_queue (p);
+
+        interrupt_table[TIMER_IRQ] = NULL;
+    }
+
     active_proc = dispatcher();
 
     /* Restore context pointer ESP */
@@ -94,6 +112,58 @@ void dummy_isr_timer ()
 void isr_com1 ();
 void dummy_isr_com1 ()
 {
+    /*
+     *  PUSHL   %EAX        ; Save process' context
+     *  PUSHL   %ECX
+     *  PUSHL   %EDX
+     *  PUSHL   %EBX
+     *  PUSHL   %EBP
+     *  PUSHL   %ESI
+     *  PUSHL   %EDI
+     */
+    asm ("isr_com1:");
+    asm ("pushl %eax;pushl %ecx;pushl %edx");
+    asm ("pushl %ebx;pushl %ebp;pushl %esi;pushl %edi");
+
+    /* Save the context pointer ESP to the PCB */
+    asm ("movl %%esp,%0" : "=m" (active_proc->esp) : );
+
+    p = interrupt_table[COM1_IRQ];
+
+    if (p == NULL) {
+        panic ("service_intr_0x64: Spurious interrupt");
+    }
+
+    if (p->state != STATE_INTR_BLOCKED) {
+        panic ("service_intr_0x64: No process waiting");
+    }
+
+    /* Add event handler to ready queue */
+    add_ready_queue (p);
+
+    interrupt_table[COM1_IRQ] = NULL;
+
+    active_proc = dispatcher();
+
+    /* Restore context pointer ESP */
+    asm ("movl %0,%%esp" : : "m" (active_proc->esp) );
+
+    /*
+     *  MOVB  $0x20,%AL ; Reset interrupt controller
+     *  OUTB  %AL,$0x20
+     *  POPL  %EDI      ; Restore previously saved context
+     *  POPL  %ESI
+     *  POPL  %EBP
+     *  POPL  %EBX
+     *  POPL  %EDX
+     *  POPL  %ECX
+     *  POPL  %EAX
+     *  IRET        ; Return to new process
+     */
+    asm ("movb $0x20,%al;outb %al,$0x20");
+    asm ("popl %edi;popl %esi;popl %ebp;popl %ebx");
+    asm ("popl %edx;popl %ecx;popl %eax");
+    asm ("iret");
 }
 
 
@@ -131,6 +201,8 @@ void dummy_isr_keyb()
 
     /* Add event handler to ready queue */
     add_ready_queue (p);
+
+    interrupt_table[KEYB_IRQ] = NULL;
 
     active_proc = dispatcher();
 
@@ -178,8 +250,7 @@ void dummy_isr_panic()
     asm ("movl %%esp,%0" : "=m" (active_proc->esp) : );
 
     print_all_processes(kernel_window);
-    kprintf ("service_intr_0x0-0xf: Panic interrupt!");
-    while(1);
+    panic ("service_intr_0x0-0xf: Panic interrupt!");
 
     /* Restore context pointer ESP */
     asm ("movl %0,%%esp" : : "m" (active_proc->esp) );
@@ -243,6 +314,19 @@ void dummy_isr_default()
 
 void wait_for_interrupt (int intr_no)
 {
+    volatile int saved_if;
+    DISABLE_INTR(saved_if);
+
+    assert(intr_no == TIMER_IRQ || intr_no == KEYB_IRQ || intr_no == COM1_IRQ);
+    assert(interrupt_table[intr_no] == NULL);
+
+    remove_ready_queue(active_proc);
+    active_proc->state = STATE_INTR_BLOCKED;
+    interrupt_table[intr_no] = active_proc;
+
+    ENABLE_INTR(saved_if);
+
+    resign();
 }
 
 
@@ -292,15 +376,17 @@ void init_interrupts()
     }
 
     init_idt_entry(TIMER_IRQ, isr_timer);
-
-    // for(i = 0; i < MAX_INTERRUPTS; i++)
-    // {
-    //     init_idt_entry(i, isr_default);
-    // }
+    init_idt_entry(KEYB_IRQ, isr_keyb);
+    init_idt_entry(COM1_IRQ, isr_com1);
 
     load_idt(idt);
 
     re_program_interrupt_controller();
+
+    for(i = 0; i < MAX_INTERRUPTS; i++)
+    {
+        interrupt_table[i] = NULL;
+    }
 
     interrupts_initialized = TRUE;
 

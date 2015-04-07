@@ -292,6 +292,10 @@ void init_pacman(WINDOW* wnd, int num_ghosts);
 
 /*=====>>> vga.c <<<=====================================================*/
 
+#define GRAPHICS_WINDOW_TOTAL_WIDTH 320
+#define GRAPHICS_WINDOW_TOTAL_HEIGHT 200
+#define GRAPHICS_WINDOW_BASE_ADDR 0xA0000
+
 int init_graph_vga();
 
 /*=====>>> tos_logo.c <<<================================================*/

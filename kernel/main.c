@@ -3,8 +3,8 @@
 
 void kernel_main()
 {
-    // unsigned char color = 0;
-    // unsigned char *window;
+    unsigned char color = 0;
+    unsigned char *window;
     WINDOW pacman_window_def = {50, 1, 30, 20, 0, 0, ' '};
 
     // this turns off the VGA hardware cursor
@@ -24,22 +24,22 @@ void kernel_main()
     init_null_process();
     init_timer();
     // init_com();
-    init_keyb();
-    init_shell();
+    // init_keyb();
+    // init_shell();
     // init_pacman(&pacman_window_def, 3);
 
-    // assert( init_graph_vga());
+    assert( init_graph_vga());
 
-    // // blank screen
-    // for(window = (unsigned char *)0xA0000; window < (unsigned char *)(0xA0000 + 320*200); window++)
-    //     *window = color;
+    // blank screen
+    for(window = (unsigned char *)0xA0000; window < (unsigned char *)(0xA0000 + 320*200); window++)
+        *window = color;
 
-    // // draw tos logo
-    // draw_tos_logo();
+    // draw tos logo
+    draw_tos_logo();
 
-    // // draw color gradient line across middle of screen
-    // for(window = (unsigned char *)(0xA0000 + 100*320); window < (unsigned char *)(0xA0000 + 320*100 + 256); window++)
-    //     *window = color++;
+    // draw color gradient line across middle of screen
+    for(window = (unsigned char *)(0xA0000 + 100*320); window < (unsigned char *)(0xA0000 + 320*100 + 256); window++)
+        *window = color++;
 
     remove_ready_queue(active_proc);
     resign();

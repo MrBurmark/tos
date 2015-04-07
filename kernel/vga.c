@@ -1,6 +1,8 @@
 
 #include <kernel.h>
 
+int graphics_mode;
+
 // code originally from
 // http://xkr47.outerspace.dyndns.org/progs/mode%2013h%20without%20using%20bios.htm
 //
@@ -29,10 +31,14 @@ static const BYTE ver_regs  [] = { 0x6,  0x7,  0x9,  0x10, 0x11,
 static const BYTE height_200[] = { 0xbf, 0x1f, 0x41, 0x9c, 0x8e,
     0x8f, 0x96, 0xb9 };
 
-int init_graph_vga()
-// returns 1=ok, 0=fail
+int start_graphic_vga()
 {
     int i;
+
+    if (graphics_mode == VGA_MODE)
+    {
+        return 1;
+    }
 
     // here goes the actual modeswitch
 
@@ -67,5 +73,26 @@ int init_graph_vga()
 
     outportb(0x3c0, 0x20); // enable video
 
+    graphics_mode = VGA_MODE;
+
     return 1;
+}
+
+int start_text_mode()
+{
+    if (graphics_mode == TEXT_MODE)
+    {
+        return 1;
+    }
+
+
+
+    // graphics_mode = TEXT_MODE;
+
+    return 0;
+}
+
+void init_graphics()
+{
+    graphics_mode = TEXT_MODE;
 }

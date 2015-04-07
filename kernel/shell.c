@@ -158,7 +158,7 @@ void pacman_func(int argc, char *argv)
 	if (argc > 7)
 		init_pacman(shell_window, atoi(argv+7));
 }
-	
+
 void init_shell()
 {
 	int i;

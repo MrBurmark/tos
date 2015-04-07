@@ -292,15 +292,22 @@ void init_pacman(WINDOW* wnd, int num_ghosts);
 
 /*=====>>> vga.c <<<=====================================================*/
 
+#define TEXT_MODE 0x00
+#define VGA_MODE 0x13
 #define GRAPHICS_WINDOW_TOTAL_WIDTH 320
 #define GRAPHICS_WINDOW_TOTAL_HEIGHT 200
 #define GRAPHICS_WINDOW_BASE_ADDR 0xA0000
 
-int init_graph_vga();
+extern int graphics_mode;
+
+void init_graphics();
+int start_graphic_vga();
+int start_text_mode();
 
 /*=====>>> tos_logo.c <<<================================================*/
 
-void set_tos_colors();
-void draw_tos_logo();
+#define LOGO_ANIMATION_SLIDE_TIME 15
+
+void tos_splash_screen(int time);
 
 #endif

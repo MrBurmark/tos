@@ -15,37 +15,50 @@ void set_tos_colors(void)
     {
         // output colors to PEL Data Register
         // note VGA supports 18 bit not 24 bit color
-        outportb(0x3C9, header_data_cmap[i][0] / 4);
-        outportb(0x3C9, header_data_cmap[i][1] / 4);
-        outportb(0x3C9, header_data_cmap[i][2] / 4);
+        outportb(0x3C9, header_data_cmap[i][0] >> 2);
+        outportb(0x3C9, header_data_cmap[i][1] >> 2);
+        outportb(0x3C9, header_data_cmap[i][2] >> 2);
     }
 }
 
 
-void draw_tos_logo(void)
+void draw_tos_logo(unsigned char *data)
 {
     int i;
-    int j;    
+    // int j;    
     unsigned char *window = (unsigned char*)GRAPHICS_WINDOW_BASE_ADDR + WINDOW_OFFSET;
 
-    set_tos_colors();
-    while(1){
-    	for (i = 0; i < tos_logo_height; i++)
-            k_memcpy(window + i*GRAPHICS_WINDOW_TOTAL_WIDTH, header_data + i*tos_logo_width, tos_logo_width);
-		// for (j = 0; j < tos_logo_width; j++)
-		// {
-		//     window[i*GRAPHICS_WINDOW_TOTAL_WIDTH + j] = header_data[i*tos_logo_width + j];
-            
-		// }
-        sleep(15);
-        for (i = 0; i < tos_logo_height; i++)
-            k_memcpy(window + i*GRAPHICS_WINDOW_TOTAL_WIDTH, header_data2 + i*tos_logo_width, tos_logo_width);
-		// for (j = 0; j < tos_logo_width; j++)
-		// {
-		//     window[i*GRAPHICS_WINDOW_TOTAL_WIDTH + j] = header_data2[i*tos_logo_width + j];
-		// }
-        sleep(15);
+	for (i = 0; i < tos_logo_height; i++)
+        k_memcpy(window + i*GRAPHICS_WINDOW_TOTAL_WIDTH, data + i*tos_logo_width, tos_logo_width);
+	// for (j = 0; j < tos_logo_width; j++)
+	// {
+	//     window[i*GRAPHICS_WINDOW_TOTAL_WIDTH + j] = header_data[i*tos_logo_width + j];
         
-        }
+	// }
+}
 
+
+void tos_splash_screen(int time)
+{
+
+    assert( start_graphic_vga() );
+
+    set_tos_colors();
+
+    // clear screen
+    k_memset((unsigned char *)GRAPHICS_WINDOW_BASE_ADDR, 0x00, GRAPHICS_WINDOW_TOTAL_WIDTH * GRAPHICS_WINDOW_TOTAL_HEIGHT);
+
+    while (time > 0)
+    {
+        // draw tos logo
+        draw_tos_logo(header_data2);
+        sleep(LOGO_ANIMATION_SLIDE_TIME);
+
+        draw_tos_logo(header_data);
+        sleep(LOGO_ANIMATION_SLIDE_TIME);
+
+        time -= 2 * LOGO_ANIMATION_SLIDE_TIME;
+    }
+
+    assert( start_text_mode() );
 }

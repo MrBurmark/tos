@@ -36,7 +36,7 @@ void draw_tos_logo(void)
         for (i = 0; i < tos_logo_height; i++)
 		for (j = 0; j < tos_logo_width; j++)
 		{
-		    window[i*320 + j] = header_data2[i*tos_logo_width + j];
+		    //window[i*320 + j] = header_data2[i*tos_logo_width + j];
 		}
         asm("nop;nop;nop;");
         

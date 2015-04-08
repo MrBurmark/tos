@@ -22,12 +22,12 @@ command cmd[MAX_COMMANDS + 1];
 
 char command_buffer[COMMAND_BUFFER_LENGTH + 1];
 
-void print_commands()
+void print_commands(WINDOW *window)
 {
 	int i;
 	for (i = 0; cmd[i].func != NULL; i++)
 	{
-		wprintf(shell_window, "cmd: %s\t%d\n", cmd[i].name, (LONG)cmd[i].func);
+		wprintf(window, "cmd: %s\t%d\n", cmd[i].name, (LONG)cmd[i].func);
 	}
 }
 
@@ -83,12 +83,12 @@ command* find_command()
 	for (i = 0; cmd[i].func != NULL; i++)
 	{
 		// wprintf(shell_window, "'%s', '%s'\n", c->name, command_buffer);
-		if (k_strcmp(cmd[i].name, command_buffer) == TRUE)
+		if (k_strcmp(cmd[i].name, command_buffer))
 		{
-			break;
+			return cmd + i;
 		}
 	}
-	return &cmd[i];
+	return cmd + MAX_COMMANDS;
 }
 
 void shell_process(PROCESS proc, PARAM param)
@@ -104,7 +104,9 @@ void shell_process(PROCESS proc, PARAM param)
 
 		c = find_command();
 
-		// print_commands();
+		wprintf(shell_window, "%s\n", c - cmd);
+
+		// print_commands(shell_window);
 
 		if (c->func == NULL)
 		{
@@ -116,6 +118,7 @@ void shell_process(PROCESS proc, PARAM param)
 
 			(c->func)(i, command_buffer);
 		}
+		k_memset(command_buffer, 0, COMMAND_BUFFER_LENGTH+1);
 	}
 }
 
@@ -131,6 +134,11 @@ BOOL init_command(char *name, void (*func) (int argc, char *argv), int i)
 	return TRUE;
 }
 
+void print_commands_func(int argc, char *argv)
+{
+	print_commands(shell_window);
+}
+
 void print_process_func(int argc, char *argv)
 {
 	print_all_processes(shell_window);
@@ -138,8 +146,16 @@ void print_process_func(int argc, char *argv)
 
 void sleep_func(int argc, char *argv)
 {
-	if (argc > 6)
+	if (argc > 7)
+	{
+		wprintf(shell_window, "Sleeping: ");
 		sleep(atoi(argv+6));
+		wprintf(shell_window, "woke after %d\n", atoi(argv+6));
+	}
+	else
+	{
+		wprintf(shell_window, "Missing argument to sleep\n");
+	}
 }
 
 void clear_func(int argc, char *argv)
@@ -149,14 +165,16 @@ void clear_func(int argc, char *argv)
 
 void echo_func(int argc, char *argv)
 {
-	if (argc > 5)
+	if (argc > 6)
 		wprintf(shell_window, "%s\n", argv+5);
 }
 
 void pacman_func(int argc, char *argv)
 {
-	if (argc > 7)
+	if (argc > 8)
 		init_pacman(shell_window, atoi(argv+7));
+	else
+		wprintf(shell_window, "Missing argument to pacman\n");
 }
 
 void init_shell()
@@ -164,21 +182,23 @@ void init_shell()
 	int i;
 
 	// init all commands to unused
-	for (i = 0; i < MAX_COMMANDS + 1; i++)
+	for (i = 0; i < MAX_COMMANDS; i++)
 	{
-		cmd[i].name = NULL;
-		cmd[i].func = NULL;
+		init_command("unused", NULL, i);
 	}
+	cmd[MAX_COMMANDS].name = "NULL";
+	cmd[MAX_COMMANDS].func = NULL;
 
 	i = 0;
 	// init used commands
+	init_command("print_commands", print_commands_func, i++);
 	init_command("print_process", print_process_func, i++);
 	init_command("sleep", sleep_func, i++);
 	init_command("clear", clear_func, i++);
 	init_command("echo", echo_func, i++);
 	init_command("pacman", pacman_func, i++);
 
-	// print_commands();
+	// print_commands(shell_window);
 
 	create_process (shell_process, 3, 0, "Shell process");
 }

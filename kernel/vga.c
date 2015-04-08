@@ -78,6 +78,7 @@ int start_graphic_vga()
     return 1;
 }
 
+//////////////////////////////////////////////////////////////////////////
 int start_text_mode()
 {
     if (graphics_mode == TEXT_MODE)
@@ -91,6 +92,7 @@ int start_text_mode()
 
     return 0;
 }
+
 
 void init_graphics()
 {

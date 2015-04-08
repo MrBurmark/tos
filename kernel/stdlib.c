@@ -4,7 +4,7 @@
 
 int k_strlen(const char* str)
 {
-	char* end = (char*)str;
+	const char* end = (char*)str;
 	while(*end != '\0') ++end;
 	return end - str;
 }
@@ -12,50 +12,47 @@ int k_strlen(const char* str)
 void* k_memcpy(void* dst, const void* src, int len)
 {
 	char* d = (char*)dst;
-	char* s = (char*)src;
-	char* end = d + len;
+	const char* s = (char*)src;
+	const char* end = d + len;
 	while(d < end) *d++ = *s++;
 	return dst;
 }
 
 int k_memcmp(const void* b1, const void* b2, int len)
 {
-	char* a = (char*)b1;
-	char* b = (char*)b2;
-	char* end = a + len;
+	const char* a = (char*)b1;
+	const char* b = (char*)b2;
+	const char* end = a + len;
 	while(a < end && *a == *b) ++a, ++b;
 	return (len == 0) ? 0 : (int)*a - (int)*b;
 }
 
 int k_strcmp(const char* str1, const char* str2)
 {
-	char* a = (char*)str1;
-	char* b = (char*)str2;
-	while(*a != '\0' && *b != '\0' && *a == *b) ++a, ++b;
-	return (*a == '\0' && *b == '\0') ? TRUE : FALSE;
+	while(*str1 == *str2 && *str1 != '\0' && *str2 != '\0') str1++, str2++;
+	return (*str1 == '\0' && *str2 == '\0') ? TRUE : FALSE;
 }
 
-void *k_memset(void *str, int c, int len)
+void *k_memset(void *dst, int c, int len)
 {
-	char* mem = (char*)str;
-	char* end = mem + len;
+	char* mem = (char*)dst;
+	const char* end = mem + len;
 	while(mem < end) *mem++ = (char)c;
-	return str;
+	return dst;
 }
 
 int atoi(const char* str)
 {
-	int i = 0;
-	char *c = str;
+	int num = 0;
 	BOOL started = FALSE;
-	while (*c != '\0')
+	while (*str != '\0')
 	{
-		if (*c >= '0' && *c <= '9')
+		if (*str >= '0' && *str <= '9')
 		{
-			i = i * 10 + *c - '0';
+			num = num * 10 + *str - '0';
 			started = TRUE;
 		}
-		else if (!started && (*c == ' ' || *c == '\t'))
+		else if (!started && (*str == ' ' || *str == '\t'))
 		{
 			continue;
 		}
@@ -63,6 +60,7 @@ int atoi(const char* str)
 		{
 			break;
 		}
+		str++;
 	}
-	return i;
+	return num;
 }

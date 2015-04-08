@@ -136,7 +136,7 @@ void output_char(WINDOW* wnd, unsigned char c)
 	/* save current cursor address before move_cursor */
 	cl = (WORD*)WINDOW_BASE_ADDR + WINDOW_OFFSET(wnd, wnd->cursor_x, wnd->cursor_y);
 
-	// assert(cursor_new_x >= 0 && cursor_new_x < wnd->width && cursor_new_y >= 0 && cursor_new_y < wnd->height);
+	assert(cursor_new_x >= 0 && cursor_new_x < wnd->width && cursor_new_y >= 0 && cursor_new_y < wnd->height);
 	assert((LONG)cl >= WINDOW_BASE_ADDR && (LONG)cl < WINDOW_BASE_ADDR + 80*25*2);
 
 	move_cursor(wnd, cursor_new_x, cursor_new_y);
@@ -395,7 +395,6 @@ void vsprintf(char *buf, const char *fmt, va_list argp)
     }
     *buf = '\0';
 }
-
 
 
 void wprintf(WINDOW* wnd, const char *fmt, ...)

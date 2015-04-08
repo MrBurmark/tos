@@ -6,7 +6,6 @@ static WINDOW null_window_def = {0, 0, 80, 1, 0, 0, ' '};
 WINDOW* null_window = &null_window_def;
 
 
-
 void null_process(PROCESS proc, PARAM param)
 {
 	WORD *pos = (WORD*)WINDOW_BASE_ADDR + WINDOW_OFFSET(null_window, null_window->cursor_x, null_window->cursor_y) + 11;

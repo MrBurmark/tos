@@ -20,10 +20,10 @@ void kernel_main()
     init_null_process();
     init_timer();
     // init_com();
-    // init_keyb();
-    // init_shell();
+    init_keyb();
+    init_shell();
 
-    tos_splash_screen(1000);
+    // tos_splash_screen(1000);
 
     remove_ready_queue(active_proc);
     resign();

@@ -2,7 +2,7 @@
 
 
 // determines location to print primes
-static WINDOW shell_window_def = {0, 10, 80, 14, 0, 0, '_'};
+static WINDOW shell_window_def = {0, 10, 80 - MAZE_WIDTH, 14, 0, 0, '_'};
 WINDOW* shell_window = &shell_window_def;
 
 #define MAX_COMMANDS 32
@@ -14,7 +14,8 @@ WINDOW* shell_window = &shell_window_def;
 typedef struct _command
 {
 	char *name;
-	void (*func) (int argc, char *argv);
+	void (*func) (int argc, char **argv);
+	char *description;
 } command;
 command cmd[MAX_COMMANDS + 1];
 
@@ -34,40 +35,27 @@ int clean_in_buf(input_buffer *in_buf)
 {
 	int i = 0;
 	int j = 0;
-
-	// skip initial white space
-	while ((in_buf->buffer[j] == ' ' || 
-			in_buf->buffer[j] == '\t' || 
-			in_buf->buffer[j] == '\n' || 
-			in_buf->buffer[j] == '\r') &&
-			j < INPUT_BUFFER_LENGTH)
-	{
-		j++;
-	}
+	int in_arg = FALSE;
 
 	while (j < INPUT_BUFFER_LENGTH && in_buf->buffer[j] != '\0')
 	{
-		if ((in_buf->buffer[j] == ' ' || 
+		if (in_buf->buffer[j] == ' ' || 
 				in_buf->buffer[j] == '\t' || 
 				in_buf->buffer[j] == '\n' || 
-				in_buf->buffer[j] == '\r') &&
-				j < INPUT_BUFFER_LENGTH)
+				in_buf->buffer[j] == '\r')
 		{
-			// skip central white space
-			in_buf->buffer[i++] = '\0';
-			
-			while ((in_buf->buffer[j] == ' ' || 
-					in_buf->buffer[j] == '\t' || 
-					in_buf->buffer[j] == '\n' || 
-					in_buf->buffer[j] == '\r') &&
-					j < INPUT_BUFFER_LENGTH)
+			// skip white space
+			if (in_arg == TRUE)
 			{
-				j++;
+				in_buf->buffer[i++] = '\0';
 			}
+			in_arg = FALSE;
+			j++;
 		}
 		else
 		{
 			in_buf->buffer[i++] = in_buf->buffer[j++];
+			in_arg = TRUE;
 		}
 	}
 	in_buf->buffer[i] = '\0';
@@ -77,9 +65,12 @@ int clean_in_buf(input_buffer *in_buf)
 void print_commands(WINDOW *wnd)
 {
 	int i;
+
+	wprintf(wnd, "Available commands\n");
+
 	for (i = 0; cmd[i].func != NULL; i++)
 	{
-		wprintf(wnd, "cmd: %s\t%d\n", cmd[i].name, (LONG)cmd[i].func);
+		wprintf(wnd, " - %s:\t%s\n", cmd[i].name, cmd[i].description);
 	}
 }
 
@@ -123,11 +114,7 @@ int get_input(input_buffer *in_buf)
 			in_buf->buffer[i++] = c;
 			win_printc(shell_window, c);
 		}
-
-		// wprintf(shell_window, "\n%d\n", i);
-		// wprintf(shell_window, "\n%c\n", in_buf->buffer[0]);
 	}
-	// wprintf(shell_window, "\n%d\n", i);
 	in_buf->buffer[0] = char0;
 	in_buf->buffer[i] = '\0';
 	return i;
@@ -135,17 +122,39 @@ int get_input(input_buffer *in_buf)
 
 command* find_command(char * in)
 {
-	int i;
-
-	for (i = 0; cmd[i].func != NULL; i++)
+	command *ci;
+	for (ci = cmd; ci->func != NULL; ci++)
 	{
-		// wprintf(shell_window, "'%s', '%s'\n", c->name, command_buffer);
-		if (k_strcmp(cmd[i].name, in))
+		if (k_strcmp(ci->name, in) == 0)
 		{
-			return cmd + i;
+			break;
 		}
 	}
-	return cmd + i;
+	return ci;
+}
+
+int setup_args(int len, const char *buf, char **argv)
+{
+	int i, j;
+	int in_arg = FALSE;
+	for (i = j = 0; i < len; i++)
+	{
+		if (buf[i] != '\0')
+		{
+			// reading through part of an argument, add to argv if this is the first char
+			if (in_arg == FALSE)
+			{
+				argv[j++] = (char *)&buf[i];
+				in_arg = TRUE;
+			}
+		}
+		else
+		{
+			// found a null char, no longer in an argument
+			in_arg = FALSE;
+		}
+	}
+	return j;
 }
 
 void shell_process(PROCESS proc, PARAM param)
@@ -153,11 +162,7 @@ void shell_process(PROCESS proc, PARAM param)
 	int i;
 	command *c;
 	input_buffer in_buf;
-
-	char test[5] = "heys";
-
-	wprintf(shell_window, "%s\n", test);
-	wprintf(shell_window, "%s\n", test);
+	char *argv[INPUT_BUFFER_LENGTH];
 
 	while(1)
 	{
@@ -165,17 +170,17 @@ void shell_process(PROCESS proc, PARAM param)
 
 		get_input(&in_buf);
 
-		wprintf(shell_window, "%s", in_buf.buffer);
+		// wprintf(shell_window, "%s", in_buf.buffer);
 
 		i = clean_in_buf(&in_buf);
 
-		wprintf(shell_window, "%s %s\n", in_buf.buffer, in_buf.buffer + 5);
+		// wprintf(shell_window, "%s %s\n", in_buf.buffer, in_buf.buffer + 5);
 
-		wprintf(shell_window, "input size %d\n", i);
+		// wprintf(shell_window, "input size %d\n", i);
 
 		c = find_command(in_buf.buffer);
 
-		wprintf(shell_window, "%s\n", c->name);
+		// wprintf(shell_window, "%s\n", c->name);
 
 		// print_commands(shell_window);
 
@@ -187,13 +192,69 @@ void shell_process(PROCESS proc, PARAM param)
 		{
 			// wprintf(shell_window, "%s\n", c->name);
 
-			(c->func)(i, in_buf.buffer);
+			i = setup_args(i, in_buf.buffer, argv);
+
+			(c->func)(i, argv);
 		}
 		k_memset(in_buf.buffer, 0, INPUT_BUFFER_LENGTH+1);
 	}
 }
 
-BOOL init_command(char *name, void (*func) (int argc, char *argv), int i) 
+void print_commands_func(int argc, char **argv)
+{
+	print_commands(shell_window);
+}
+
+void print_process_func(int argc, char **argv)
+{
+	print_all_processes(shell_window);
+}
+
+void sleep_func(int argc, char **argv)
+{
+	if (argc > 1)
+	{
+		wprintf(shell_window, "Sleeping: ");
+		sleep(atoi(argv[1]));
+		wprintf(shell_window, "woke after %d\n", atoi(argv[1]));
+	}
+	else
+	{
+		wprintf(shell_window, "Missing argument to sleep\n");
+	}
+}
+
+void clear_func(int argc, char **argv)
+{
+	clear_window(shell_window);
+}
+
+void echo_func(int argc, char **argv)
+{
+	int i = 1;
+	while (i < argc)
+		wprintf(shell_window, "%s ", argv[i++]);
+	if (argc > 1)
+		wprintf(shell_window, "\n");
+}
+
+void pacman_func(int argc, char **argv)
+{
+	WINDOW pacman_window;
+	pacman_window.x = WINDOW_TOTAL_WIDTH - MAZE_WIDTH;
+	pacman_window.y = WINDOW_TOTAL_HEIGHT - MAZE_HEIGHT - 1;
+	move_cursor(&pacman_window, 0, 0);
+
+	if (argc > 1)
+	{
+		wprintf(shell_window, "Starting pacman with %d ghosts\n", atoi(argv[1]));
+		init_pacman(&pacman_window, atoi(argv[1]));
+	}
+	else
+		wprintf(shell_window, "Missing argument to pacman\n");
+}
+
+BOOL init_command(char *name, void (*func) (int argc, char **argv), char *description, int i) 
 {
 	if (i >= MAX_COMMANDS) 
 	{
@@ -202,72 +263,30 @@ BOOL init_command(char *name, void (*func) (int argc, char *argv), int i)
 	}
 	cmd[i].name = name;
 	cmd[i].func = func;
+	cmd[i].description = description;
 	return TRUE;
-}
-
-void print_commands_func(int argc, char *argv)
-{
-	print_commands(shell_window);
-}
-
-void print_process_func(int argc, char *argv)
-{
-	print_all_processes(shell_window);
-}
-
-void sleep_func(int argc, char *argv)
-{
-	if (argc > 7)
-	{
-		wprintf(shell_window, "Sleeping: ");
-		sleep(atoi(argv+6));
-		wprintf(shell_window, "woke after %d\n", atoi(argv+6));
-	}
-	else
-	{
-		wprintf(shell_window, "Missing argument to sleep\n");
-	}
-}
-
-void clear_func(int argc, char *argv)
-{
-	clear_window(shell_window);
-}
-
-void echo_func(int argc, char *argv)
-{
-	if (argc > 6)
-		wprintf(shell_window, "%s\n", argv+5);
-}
-
-void pacman_func(int argc, char *argv)
-{
-	if (argc > 8)
-		init_pacman(shell_window, atoi(argv+7));
-	else
-		wprintf(shell_window, "Missing argument to pacman\n");
 }
 
 void init_shell()
 {
-	int i;
+	int i = 0;
 
-	// init all commands to unused
-	for (i = 0; i < MAX_COMMANDS; i++)
+	// init used commands
+	init_command("help", print_commands_func, "Prints all commands", i++);
+	init_command("prproc", print_process_func, "Prints all processes", i++);
+	init_command("sleep", sleep_func, "Sleeps for the given duration", i++);
+	init_command("clear", clear_func, "Clears the screen", i++);
+	init_command("echo", echo_func, "Prints its arguments", i++);
+	init_command("pacman", pacman_func, "Starts pacman with given number of ghosts", i++);
+
+	// init unused commands
+	while (i < MAX_COMMANDS)
 	{
-		init_command("unused", NULL, i);
+		init_command("unused", NULL, "-", i++);
 	}
 	cmd[MAX_COMMANDS].name = "NULL";
 	cmd[MAX_COMMANDS].func = NULL;
-
-	i = 0;
-	// init used commands
-	init_command("help", print_commands_func, i++);
-	init_command("print_process", print_process_func, i++);
-	init_command("sleep", sleep_func, i++);
-	init_command("clear", clear_func, i++);
-	init_command("echo", echo_func, i++);
-	init_command("pacman", pacman_func, i++);
+	cmd[MAX_COMMANDS].description = "NULL";
 
 	// print_commands(shell_window);
 

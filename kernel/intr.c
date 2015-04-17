@@ -303,7 +303,7 @@ void wait_for_interrupt (int intr_no)
     volatile int saved_if;
     DISABLE_INTR(saved_if);
 
-    assert(intr_no == TIMER_IRQ || intr_no == KEYB_IRQ || intr_no == COM1_IRQ);
+    // assert(intr_no == TIMER_IRQ || intr_no == KEYB_IRQ || intr_no == COM1_IRQ);
     assert(interrupt_table[intr_no] == NULL);
 
     remove_ready_queue(active_proc);

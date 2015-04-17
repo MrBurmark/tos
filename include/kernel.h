@@ -289,6 +289,9 @@ void set_train_speed(char* speed);
 
 /*=====>>> pacman.c <<<==================================================*/
 
+#define MAZE_WIDTH  19
+#define MAZE_HEIGHT 16
+
 void init_pacman(WINDOW* wnd, int num_ghosts);
 
 /*=====>>> vga.c <<<=====================================================*/

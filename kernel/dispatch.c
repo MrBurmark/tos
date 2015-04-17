@@ -14,7 +14,6 @@ PCB *ready_queue [MAX_READY_QUEUES];
 
 
 
-
 /*
  * add_ready_queue
  *----------------------------------------------------------------------------
@@ -103,6 +102,7 @@ void remove_ready_queue (PROCESS proc)
 PROCESS dispatcher()
 {
 	int prio;
+	PROCESS proc;
 	volatile int saved_if;
 	DISABLE_INTR(saved_if);
 
@@ -114,18 +114,17 @@ PROCESS dispatcher()
 		}
 		else if(prio == active_proc->priority)
 		{
-			ENABLE_INTR(saved_if); 
-			return active_proc->next;
+			proc = active_proc->next;
+			break;
 		} 
 		else
 		{
-			ENABLE_INTR(saved_if); 
-			return ready_queue[prio];
+			proc = ready_queue[prio];
+			break;
 		}
 	}
-	assert(0);
 	ENABLE_INTR(saved_if); 
-	return (PROCESS) NULL;
+	return proc;
 }
 
 
@@ -144,7 +143,7 @@ void resign()
 		"cli;"
 		"popl %%eax;"
 		"xchg (%%esp), %%eax;"
-		"pushl %%cs;"
+		"push %%cs;"
 		"pushl %%eax;"
 		"pushl %%eax;"
 		"pushl %%ecx;"

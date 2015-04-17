@@ -18,6 +18,8 @@ PORT create_new_port (PROCESS owner)
 	volatile int saved_if;
 	DISABLE_INTR(saved_if);
 
+	assert(owner->magic == MAGIC_PCB);
+
 	/* allocate unused port */
 	end = port + MAX_PORTS;
 	for (p = port; p < end; p++)
@@ -36,7 +38,7 @@ PORT create_new_port (PROCESS owner)
 	p->owner 				= owner;
 	p->blocked_list_head 	= NULL;
     p->blocked_list_tail 	= NULL;
-    p->next 				= NULL;
+    // p->next 				= NULL;
 
     /* Add new port to head of owner's port list */
     p->next 			= owner->first_port;
@@ -74,10 +76,10 @@ void close_port (PORT port)
 
 void add_to_blocked_list(PORT dest_port)
 {
-	// volatile int saved_if;
-	// DISABLE_INTR(saved_if);
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
 
-	if(dest_port->blocked_list_tail == NULL)
+	if(dest_port->blocked_list_head == NULL)
 	{
 		/* Empty list */
 		dest_port->blocked_list_head = active_proc;
@@ -90,7 +92,7 @@ void add_to_blocked_list(PORT dest_port)
 	dest_port->blocked_list_tail = active_proc;
 	active_proc->next_blocked = NULL;
 
-	// ENABLE_INTR(saved_if);
+	ENABLE_INTR(saved_if);
 }
 
 
@@ -200,8 +202,8 @@ void* receive (PROCESS* sender)
 {
 	void* mess = NULL;
 
-	// volatile int saved_if;
-	// DISABLE_INTR(saved_if);
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
 
 	/* take a message if one is waiting */
 	*sender = pop_message();
@@ -227,9 +229,9 @@ void* receive (PROCESS* sender)
 		remove_ready_queue(active_proc);
 		active_proc->state = STATE_RECEIVE_BLOCKED;
 
-		// ENABLE_INTR(saved_if);
+		ENABLE_INTR(saved_if);
 		resign();
-		// DISABLE_INTR(saved_if);
+		DISABLE_INTR(saved_if);
 
 		/* Message received */
 		/* data in own PCB */
@@ -237,7 +239,7 @@ void* receive (PROCESS* sender)
 		*sender = active_proc->param_proc;
 	}
 
-	// ENABLE_INTR(saved_if);
+	ENABLE_INTR(saved_if);
 
 	return mess;
 }
@@ -245,8 +247,8 @@ void* receive (PROCESS* sender)
 
 void reply (PROCESS sender)
 {
-	// volatile int saved_if;
-	// DISABLE_INTR(saved_if);
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
 	
 	if (sender->state == STATE_REPLY_BLOCKED)
 	{
@@ -254,7 +256,7 @@ void reply (PROCESS sender)
 		add_ready_queue(sender);
 	}
 
-	// ENABLE_INTR(saved_if);
+	ENABLE_INTR(saved_if);
 
 	resign();
 }
@@ -268,10 +270,10 @@ void init_ipc()
 	end = port + MAX_PORTS;
 	for (p = port; p < end; p++)
 	{
-		p->magic = ~MAGIC_PORT;
+		p->magic = MAGIC_PORT;
 		p->used = FALSE;
 	}
 
-	/* Create port for null process */
-	create_port();
+	/* Create port for boot process */
+	// create_port();
 }

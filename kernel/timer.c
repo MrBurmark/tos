@@ -116,7 +116,7 @@ void timer_process(PROCESS self, PARAM param)
 	create_process(timer_notifier, 7, 0, "Timer notifier");
 	while(1)
 	{
-		msg = receive(&proc);
+		msg = (Timer_Message *)receive(&proc);
 		if (msg == NULL)
 		{
 			// message from timer_notifier

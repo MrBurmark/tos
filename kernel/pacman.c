@@ -1,8 +1,6 @@
 
 #include <kernel.h>
 
-#define MAZE_WIDTH  19
-#define MAZE_HEIGHT 16
 #define GHOST_CHAR  0x02
 
 unsigned int ghost_sleep = 0x38;
@@ -97,7 +95,7 @@ void draw_maze()
 	}
 	y++;
     }
-    // wprintf(pacman_wnd, "PacMan ");
+    wprintf(pacman_wnd, "PacMan ");
 }
 
 
@@ -115,10 +113,11 @@ int random()
 
 void init_ghost(GHOST* ghost)
 {
+    int x, y;
     while (1)
     {
-    	int x = random() % MAZE_WIDTH;
-    	int y = random() % MAZE_HEIGHT;
+    	x = random() % MAZE_WIDTH;
+    	y = random() % MAZE_HEIGHT;
     	if (maze[y][x] != ' ') continue;
     	ghost->x = x;
     	ghost->y = y;
@@ -126,31 +125,30 @@ void init_ghost(GHOST* ghost)
     }
 }
 
-
-void wait(unsigned int n)
-{
-    volatile unsigned int i;
-    n *= 1;
-    for(i=0; i < n; i++) ;
-}
-
 void move_ghost(GHOST *ghost)
 {
-    int x, y;
+    int x, y, num;
     WORD *cl;
-    volatile int saved_if;
-    DISABLE_INTR(saved_if);
 
     while (1)
     {
-        x = (random() % 4) - 1;
-        y = 0;
-        if ((x % 2) == 0)
+        num = random() % 4;
+        switch (num)
         {
-            y = x - 1;
-            x = 0;
+            case 0:
+                x = 1;
+                break;
+            case 1:
+                x = -1;
+                break;
+            case 2:
+                y = 1;
+                break;
+            case 3:
+                y = -1;
+                break;
         }
-            
+        
         if (maze[ghost->y + y][ghost->x + x] == ' ')
         {
             break;
@@ -159,20 +157,14 @@ void move_ghost(GHOST *ghost)
 
     /* save ghost locations in maze */
     /* add/remove characters from pacman_wnd directly as only 1 cursor per window */
-    maze[ghost->y][ghost->x] = ' ';
-    cl = (WORD*)WINDOW_BASE_ADDR + WINDOW_OFFSET(pacman_wnd, ghost->x, ghost->y);
-    poke_w((MEM_ADDR)cl, ' ' | 0x0F00);
 
+    move_cursor(pacman_wnd, ghost->x, ghost->y);
+    remove_cursor(pacman_wnd);
     ghost->x += x;
     ghost->y += y;
-
-    maze[ghost->y][ghost->x] = GHOST_CHAR;
-    cl = (WORD*)WINDOW_BASE_ADDR + WINDOW_OFFSET(pacman_wnd, ghost->x, ghost->y);
-    poke_w((MEM_ADDR)cl, GHOST_CHAR | 0x0F00);
-
-    ENABLE_INTR(saved_if);
+    move_cursor(pacman_wnd, ghost->x, ghost->y);
+    show_cursor(pacman_wnd);
 }
-
 
 void create_new_ghost()
 {
@@ -185,25 +177,23 @@ void create_new_ghost()
     }
 }
 
-
 void ghost_proc(PROCESS self, PARAM param)
 {
     create_new_ghost();
 }
-
     
 void init_pacman(WINDOW* wnd, int num_ghosts)
 {
-    if (wnd->height < MAZE_HEIGHT || wnd->width < MAZE_WIDTH)
+    if (wnd->height < MAZE_HEIGHT + 1 || wnd->width < MAZE_WIDTH)
     {
         wprintf(wnd, "Window too small\n");
         return;
     }
 
     pacman_wnd = wnd;
-    // pacman_wnd->width = MAZE_WIDTH;
-    // pacman_wnd->height = MAZE_HEIGHT + 1;
-    // pacman_wnd->cursor_char = GHOST_CHAR;
+    pacman_wnd->width = MAZE_WIDTH;
+    pacman_wnd->height = MAZE_HEIGHT + 1;
+    pacman_wnd->cursor_char = GHOST_CHAR;
 
     draw_maze();
 

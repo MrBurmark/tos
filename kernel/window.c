@@ -25,38 +25,36 @@ unsigned char read_char(int offset)
 /* sets the currect cursor location to black ' ' */
 void move_cursor(WINDOW* wnd, int x, int y)
 {
-	volatile int saved_if;
-	DISABLE_INTR(saved_if);
+	// volatile int saved_if;
+	// DISABLE_INTR(saved_if);
 	
 	assert(x >= 0 && y >= 0 && x < wnd->width && y < wnd->height);
-	remove_cursor(wnd);
 	wnd->cursor_x = x;
 	wnd->cursor_y = y;
-	show_cursor(wnd);
 
-	ENABLE_INTR(saved_if); 
+	// ENABLE_INTR(saved_if); 
 }
 
 
 void remove_cursor(WINDOW* wnd)
 {
-	volatile int saved_if;
-	DISABLE_INTR(saved_if);
+	// volatile int saved_if;
+	// DISABLE_INTR(saved_if);
 
 	write_char(WINDOW_OFFSET(wnd, wnd->cursor_x, wnd->cursor_y), ' ');
 
-	ENABLE_INTR(saved_if); 
+	// ENABLE_INTR(saved_if); 
 }
 
 
 void show_cursor(WINDOW* wnd)
 {
-	volatile int saved_if;
-	DISABLE_INTR(saved_if);
+	// volatile int saved_if;
+	// DISABLE_INTR(saved_if);
 
 	write_char(WINDOW_OFFSET(wnd, wnd->cursor_x, wnd->cursor_y), wnd->cursor_char);
 
-	ENABLE_INTR(saved_if); 
+	// ENABLE_INTR(saved_if); 
 }
 
 
@@ -76,6 +74,7 @@ void clear_window(WINDOW* wnd)
 		}
 	}
 	move_cursor(wnd, 0, 0);
+	show_cursor(wnd);
 
 	ENABLE_INTR(saved_if);
 }
@@ -108,6 +107,7 @@ BOOL scroll_window(WINDOW* wnd, int lines)
 	else
 	{
 		move_cursor(wnd, 0, 0);
+		show_cursor(wnd);
 		return TRUE;
 	}
 }
@@ -124,6 +124,7 @@ void remove_char(WINDOW* wnd)
 		// removing within a single line
 		c = read_char(WINDOW_OFFSET(wnd, wnd->cursor_x - 1, wnd->cursor_y));
 		// remove single character
+		remove_cursor(wnd);
 		move_cursor(wnd, wnd->cursor_x - 1, wnd->cursor_y);
 
 		if (c == '\t')
@@ -132,6 +133,7 @@ void remove_char(WINDOW* wnd)
 			// removing tabs
 			while (c == '\t' && wnd->cursor_x % TAB_SIZE != 0)
 			{
+				remove_cursor(wnd);
 				move_cursor(wnd, wnd->cursor_x - 1, wnd->cursor_y);
 				c = read_char(WINDOW_OFFSET(wnd, wnd->cursor_x - 1, wnd->cursor_y));
 			}
@@ -142,6 +144,7 @@ void remove_char(WINDOW* wnd)
 		// removing on previous line if it exists
 		c = read_char(WINDOW_OFFSET(wnd, wnd->width - 1, wnd->cursor_y - 1));
 		// move cursor to end of new line, removing single character
+		remove_cursor(wnd);
 		move_cursor(wnd, wnd->width - 1, wnd->cursor_y - 1);
 
 		if (c == '\n' || c == '\r')
@@ -150,6 +153,7 @@ void remove_char(WINDOW* wnd)
 			// removing newlines
 			while ((c == '\n' || c == '\r') && wnd->cursor_x > 0)
 			{
+				remove_cursor(wnd);
 				move_cursor(wnd, wnd->cursor_x - 1, wnd->cursor_y);
 				c = read_char(WINDOW_OFFSET(wnd, wnd->cursor_x - 1, wnd->cursor_y));
 			}
@@ -160,11 +164,14 @@ void remove_char(WINDOW* wnd)
 			// removing tabs
 			while (c == '\t' && wnd->cursor_x % TAB_SIZE != 0)
 			{
+				remove_cursor(wnd);
 				move_cursor(wnd, wnd->cursor_x - 1, wnd->cursor_y);
 				c = read_char(WINDOW_OFFSET(wnd, wnd->cursor_x - 1, wnd->cursor_y));
 			}
 		}
 	}
+
+	show_cursor(wnd);
 
 	ENABLE_INTR(saved_if); 
 }
@@ -207,6 +214,8 @@ void output_char(WINDOW* wnd, unsigned char c)
 			break;
 	}
 
+	remove_cursor(wnd);
+
 	if (cursor_new_y >= wnd->height)
 	{
 		write = !scroll_window(wnd, cursor_new_y - wnd->height + 1);
@@ -234,6 +243,8 @@ void output_char(WINDOW* wnd, unsigned char c)
 		}
 	}
 
+	show_cursor(wnd);
+
 	ENABLE_INTR(saved_if); 
 }
 
@@ -241,15 +252,15 @@ void output_char(WINDOW* wnd, unsigned char c)
 
 void output_string(WINDOW* wnd, const char *str)
 {
-	volatile int saved_if;
-	DISABLE_INTR(saved_if);
+	// volatile int saved_if;
+	// DISABLE_INTR(saved_if);
 
 	while(*str != '\0')
 	{
 		output_char(wnd, *str++);
 	}
 	
-	ENABLE_INTR(saved_if); 
+	// ENABLE_INTR(saved_if); 
 }
 
 

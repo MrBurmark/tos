@@ -103,8 +103,8 @@ PROCESS fork()
 
 void print_pcb(WINDOW* wnd, PROCESS p)
 {
-	volatile int saved_if;
-	DISABLE_INTR(saved_if);
+	// volatile int saved_if;
+	// DISABLE_INTR(saved_if);
 
 	// unsigned       magic;
  //    unsigned       used;
@@ -122,13 +122,13 @@ void print_pcb(WINDOW* wnd, PROCESS p)
 	////////////////////////////////////////////////////////////////////////////////
     wprintf(wnd, "%s\t%s\t%d\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\n", p->magic == MAGIC_PCB ? "magic" : "~magic", p->used == TRUE ? "True" : "False", p->priority, &state[0] + p->state * 16, p->esp, p->param_proc ? p->param_proc-pcb : -1, p->param_data, p->first_port-port, p->next_blocked ? p->next_blocked-pcb : -1, p->next ? p->next-pcb : -1, p->prev ? p->prev-pcb : -1, p->name);
 
-    ENABLE_INTR(saved_if); 
+    // ENABLE_INTR(saved_if); 
 }
 
 void print_process(WINDOW* wnd, PROCESS p)
 {
-	volatile int saved_if;
-	DISABLE_INTR(saved_if);
+	// volatile int saved_if;
+	// DISABLE_INTR(saved_if);
 
 	/* relies on order of states given in kernel.h */
 	static const char state[16*6] = "READY          \0SEND_BLOCKED   \0REPLY_BLOCKED  \0RECEIVE_BLOCKED\0MESSAGE_BLOCKED\0INTR_BLOCKED   ";
@@ -136,15 +136,15 @@ void print_process(WINDOW* wnd, PROCESS p)
 	if(p->used == TRUE)
 		wprintf(wnd, "%s\t%s\t%4d\t%4d\t%s\n", &state[0] + p->state * 16, (active_proc == p) ? "*     " : "      ", p - pcb, p->priority, p->name);
 
-	ENABLE_INTR(saved_if); 
+	// ENABLE_INTR(saved_if); 
 }
 
 void print_all_processes(WINDOW* wnd)
 {
 	PROCESS proc, end;
 
-	volatile int saved_if;
-	DISABLE_INTR(saved_if);
+	// volatile int saved_if;
+	// DISABLE_INTR(saved_if);
 
 	/* ensure cursor at start of new line */
 	if (wnd->cursor_x != 0)
@@ -160,14 +160,13 @@ void print_all_processes(WINDOW* wnd)
 	end = pcb + MAX_PROCS;
 	for (proc = pcb; proc < end; proc++)
 	{
-		///////////////////////////////////////////////////////////////////////////////////
 		if (proc->used == TRUE)
 		{
 			print_process(wnd, proc);
 		}
 	}
 
-	ENABLE_INTR(saved_if); 
+	// ENABLE_INTR(saved_if); 
 }
 
 

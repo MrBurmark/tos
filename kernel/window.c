@@ -25,36 +25,36 @@ unsigned char read_char(int offset)
 /* sets the currect cursor location to black ' ' */
 void move_cursor(WINDOW* wnd, int x, int y)
 {
-	// volatile int saved_if;
-	// DISABLE_INTR(saved_if);
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
 	
 	assert(x >= 0 && y >= 0 && x < wnd->width && y < wnd->height);
 	wnd->cursor_x = x;
 	wnd->cursor_y = y;
 
-	// ENABLE_INTR(saved_if); 
+	ENABLE_INTR(saved_if); 
 }
 
 
 void remove_cursor(WINDOW* wnd)
 {
-	// volatile int saved_if;
-	// DISABLE_INTR(saved_if);
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
 
 	write_char(WINDOW_OFFSET(wnd, wnd->cursor_x, wnd->cursor_y), ' ');
 
-	// ENABLE_INTR(saved_if); 
+	ENABLE_INTR(saved_if); 
 }
 
 
 void show_cursor(WINDOW* wnd)
 {
-	// volatile int saved_if;
-	// DISABLE_INTR(saved_if);
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
 
 	write_char(WINDOW_OFFSET(wnd, wnd->cursor_x, wnd->cursor_y), wnd->cursor_char);
 
-	// ENABLE_INTR(saved_if); 
+	ENABLE_INTR(saved_if); 
 }
 
 

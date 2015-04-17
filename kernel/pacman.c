@@ -127,41 +127,37 @@ void init_ghost(GHOST* ghost)
 
 void move_ghost(GHOST *ghost)
 {
-    int x, y, num;
-    WORD *cl;
+    int dx, dy, num;
+    dx = -ghost->x;
+    dy = -ghost->y;
 
-    while (1)
+    while (maze[ghost->y + dy][ghost->x + dx] != ' ')
     {
+        dx = dy = 0;
         num = random() % 4;
         switch (num)
         {
             case 0:
-                x = 1;
+                dx = 1;
                 break;
             case 1:
-                x = -1;
+                dx = -1;
                 break;
             case 2:
-                y = 1;
+                dy = 1;
                 break;
             case 3:
-                y = -1;
+                dy = -1;
                 break;
-        }
-        
-        if (maze[ghost->y + y][ghost->x + x] == ' ')
-        {
-            break;
         }
     }
 
-    /* save ghost locations in maze */
-    /* add/remove characters from pacman_wnd directly as only 1 cursor per window */
+    /* add/remove ghost from pacman_wnd */
 
     move_cursor(pacman_wnd, ghost->x, ghost->y);
     remove_cursor(pacman_wnd);
-    ghost->x += x;
-    ghost->y += y;
+    ghost->x += dx;
+    ghost->y += dy;
     move_cursor(pacman_wnd, ghost->x, ghost->y);
     show_cursor(pacman_wnd);
 }
@@ -172,8 +168,8 @@ void create_new_ghost()
     init_ghost(&ghost);
     while(1)
     {
-        move_ghost(&ghost);
         sleep(ghost_sleep);
+        move_ghost(&ghost);
     }
 }
 
@@ -181,7 +177,7 @@ void ghost_proc(PROCESS self, PARAM param)
 {
     create_new_ghost();
 }
-    
+
 void init_pacman(WINDOW* wnd, int num_ghosts)
 {
     if (wnd->height < MAZE_HEIGHT + 1 || wnd->width < MAZE_WIDTH)

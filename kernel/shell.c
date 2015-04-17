@@ -26,6 +26,8 @@ typedef struct _input_buffer
 	char buffer[INPUT_BUFFER_LENGTH + 1];
 } input_buffer;
 
+char *in_buf_buffer;
+
 void clear_in_buf(input_buffer *in_buf)
 {
 	k_memset(in_buf->buffer, 0, INPUT_BUFFER_LENGTH + 1);
@@ -62,6 +64,35 @@ int clean_in_buf(input_buffer *in_buf)
 	return i;
 }
 
+int setup_args(int len, const input_buffer *in_buf, char **argv)
+{
+	int i, j;
+	int in_arg = FALSE;
+	for (i = j = 0; i < len; i++)
+	{
+		if (in_buf->buffer[i] != '\0')
+		{
+			// reading through part of an argument, add to argv if this is the first char
+			if (in_arg == FALSE)
+			{
+				argv[j++] = (char *)&in_buf->buffer[i];
+				in_arg = TRUE;
+			}
+		}
+		else
+		{
+			// found a null char, no longer in an argument
+			in_arg = FALSE;
+		}
+	}
+	return j;
+}
+
+void clear_args(char **argv)
+{
+	k_memset(argv, 0, INPUT_BUFFER_LENGTH*sizeof(char *));
+}
+
 void print_commands(WINDOW *wnd)
 {
 	int i;
@@ -93,16 +124,13 @@ int get_input(input_buffer *in_buf)
 {
 	int i = 0;
 	char c = '\0';
-	char char0 = '\0';
 	Keyb_Message msg;
+	msg.key_buffer = &c;
+	
 	while(i < INPUT_BUFFER_LENGTH && c != '\n' && c != '\r')
 	{
+		// get new character
 		send(keyb_port, (void *)&msg);
-
-		c = *(msg.key_buffer);
-
-		if (i == 0)
-			char0 = c;
 
 		if (c == '\b' && i > 0)
 		{
@@ -115,46 +143,21 @@ int get_input(input_buffer *in_buf)
 			win_printc(shell_window, c);
 		}
 	}
-	in_buf->buffer[0] = char0;
 	in_buf->buffer[i] = '\0';
 	return i;
 }
 
-command* find_command(char * in)
+command* find_command(input_buffer *in_buf)
 {
 	command *ci;
 	for (ci = cmd; ci->func != NULL; ci++)
 	{
-		if (k_strcmp(ci->name, in) == 0)
+		if (k_strcmp(ci->name, in_buf->buffer) == 0)
 		{
 			break;
 		}
 	}
 	return ci;
-}
-
-int setup_args(int len, const char *buf, char **argv)
-{
-	int i, j;
-	int in_arg = FALSE;
-	for (i = j = 0; i < len; i++)
-	{
-		if (buf[i] != '\0')
-		{
-			// reading through part of an argument, add to argv if this is the first char
-			if (in_arg == FALSE)
-			{
-				argv[j++] = (char *)&buf[i];
-				in_arg = TRUE;
-			}
-		}
-		else
-		{
-			// found a null char, no longer in an argument
-			in_arg = FALSE;
-		}
-	}
-	return j;
 }
 
 void shell_process(PROCESS proc, PARAM param)
@@ -163,6 +166,8 @@ void shell_process(PROCESS proc, PARAM param)
 	command *c;
 	input_buffer in_buf;
 	char *argv[INPUT_BUFFER_LENGTH];
+
+	in_buf_buffer = in_buf.buffer;
 
 	while(1)
 	{
@@ -178,7 +183,7 @@ void shell_process(PROCESS proc, PARAM param)
 
 		// wprintf(shell_window, "input size %d\n", i);
 
-		c = find_command(in_buf.buffer);
+		c = find_command(&in_buf);
 
 		// wprintf(shell_window, "%s\n", c->name);
 
@@ -192,7 +197,9 @@ void shell_process(PROCESS proc, PARAM param)
 		{
 			// wprintf(shell_window, "%s\n", c->name);
 
-			i = setup_args(i, in_buf.buffer, argv);
+			clear_args(argv);
+
+			i = setup_args(i, &in_buf, argv);
 
 			(c->func)(i, argv);
 		}
@@ -273,7 +280,7 @@ void init_shell()
 
 	// init used commands
 	init_command("help", print_commands_func, "Prints all commands", i++);
-	init_command("prproc", print_process_func, "Prints all processes", i++);
+	init_command("prtprc", print_process_func, "Prints all processes", i++);
 	init_command("sleep", sleep_func, "Sleeps for the given duration", i++);
 	init_command("clear", clear_func, "Clears the screen", i++);
 	init_command("echo", echo_func, "Prints its arguments", i++);
@@ -282,7 +289,7 @@ void init_shell()
 	// init unused commands
 	while (i < MAX_COMMANDS)
 	{
-		init_command("unused", NULL, "-", i++);
+		init_command("----", NULL, "unused", i++);
 	}
 	cmd[MAX_COMMANDS].name = "NULL";
 	cmd[MAX_COMMANDS].func = NULL;

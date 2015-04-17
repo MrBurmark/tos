@@ -1,8 +1,6 @@
 
 #include <kernel.h>
 
-#define GHOST_CHAR  0x02
-
 unsigned int ghost_sleep = 0x38;
 
 typedef struct {
@@ -10,9 +8,8 @@ typedef struct {
     int y;
 } GHOST;
 
-
-WINDOW* pacman_wnd;
-
+static WINDOW pacman_window_def = {WINDOW_TOTAL_WIDTH - MAZE_WIDTH, WINDOW_TOTAL_HEIGHT - MAZE_HEIGHT - 1, MAZE_WIDTH, MAZE_HEIGHT + 1, 0, 0, GHOST_CHAR};
+WINDOW* pacman_wnd = &pacman_window_def;
 
 
 char *maze[] = {
@@ -77,8 +74,6 @@ void draw_maze_char(char maze_char)
     output_char(pacman_wnd, ch);
 }
 
-
-
 void draw_maze()
 {
     int x, y;
@@ -97,7 +92,6 @@ void draw_maze()
     }
     wprintf(pacman_wnd, "PacMan ");
 }
-
 
 
 // Pseudo random number generator
@@ -131,7 +125,7 @@ void move_ghost(GHOST *ghost)
     dx = -ghost->x;
     dy = -ghost->y;
 
-    while (maze[ghost->y + dy][ghost->x + dx] != ' ')
+    do
     {
         dx = dy = 0;
         num = random() % 4;
@@ -141,18 +135,19 @@ void move_ghost(GHOST *ghost)
                 dx = 1;
                 break;
             case 1:
-                dx = -1;
+                dy = -1;
                 break;
             case 2:
-                dy = 1;
+                dx = -1;
                 break;
             case 3:
-                dy = -1;
+                dy = 1;
                 break;
         }
     }
+    while (maze[ghost->y + dy][ghost->x + dx] != ' ');
 
-    /* add/remove ghost from pacman_wnd */
+    /* move ghost in pacman_wnd */
 
     move_cursor(pacman_wnd, ghost->x, ghost->y);
     remove_cursor(pacman_wnd);
@@ -190,6 +185,9 @@ void init_pacman(WINDOW* wnd, int num_ghosts)
     pacman_wnd->width = MAZE_WIDTH;
     pacman_wnd->height = MAZE_HEIGHT + 1;
     pacman_wnd->cursor_char = GHOST_CHAR;
+    move_cursor(pacman_wnd, 0, 0);
+
+    // clear_window(pacman_wnd);
 
     draw_maze();
 

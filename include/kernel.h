@@ -291,6 +291,10 @@ void set_train_speed(char* speed);
 
 #define MAZE_WIDTH  19
 #define MAZE_HEIGHT 16
+#define GHOST_CHAR  0x02
+
+extern unsigned int ghost_sleep;
+extern WINDOW* pacman_wnd;
 
 void init_pacman(WINDOW* wnd, int num_ghosts);
 

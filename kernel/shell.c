@@ -196,7 +196,7 @@ void shell_process(PROCESS proc, PARAM param)
 
 			// check for error code returned
 			if (i != 0)
-				wprintf(shell_window, "%s exited with error code %d\n", c->name, i);
+				wprintf(shell_window, "%s exited with code %d\n", c->name, i);
 		}
 	}
 }
@@ -247,15 +247,17 @@ int echo_func(int argc, char **argv)
 
 int pacman_func(int argc, char **argv)
 {
-	WINDOW pacman_window;
-	pacman_window.x = WINDOW_TOTAL_WIDTH - MAZE_WIDTH;
-	pacman_window.y = WINDOW_TOTAL_HEIGHT - MAZE_HEIGHT - 1;
-	move_cursor(&pacman_window, 0, 0);
+	pacman_wnd->x = WINDOW_TOTAL_WIDTH - MAZE_WIDTH;
+	pacman_wnd->y = WINDOW_TOTAL_HEIGHT - MAZE_HEIGHT - 1;
+	pacman_wnd->width = MAZE_WIDTH;
+	pacman_wnd->height = MAZE_HEIGHT + 1;
+	move_cursor(pacman_wnd, 0, 0);
+	pacman_wnd->cursor_char = '_';
 
 	if (argc > 1)
 	{
 		wprintf(shell_window, "Starting pacman with %d ghosts\n", atoi(argv[1]));
-		init_pacman(&pacman_window, atoi(argv[1]));
+		init_pacman(pacman_wnd, atoi(argv[1]));
 		return 0;
 	}
 	else

@@ -22,6 +22,7 @@ void kernel_main()
     init_com();
     init_keyb();
     init_shell();
+    init_pacman(pacman_wnd, 2);
 
     // tos_splash_screen(1000);
 

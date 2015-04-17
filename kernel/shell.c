@@ -17,16 +17,18 @@ typedef struct _command
 } command;
 command cmd[MAX_COMMANDS + 1];
 
-#define INPUT_BUFFER_LENGTH 160
+#define INPUT_BUFFER_MAX_LENGTH 160
 
 typedef struct _input_buffer
 {
-	char buffer[INPUT_BUFFER_LENGTH + 1];
+	int length;
+	char buffer[INPUT_BUFFER_MAX_LENGTH + 1];
 } input_buffer;
 
 void clear_in_buf(input_buffer *in_buf)
 {
-	k_memset(in_buf->buffer, 0, INPUT_BUFFER_LENGTH + 1);
+	k_memset(in_buf->buffer, 0, INPUT_BUFFER_MAX_LENGTH + 1);
+	in_buf->length = 0;
 }
 
 int clean_in_buf(input_buffer *in_buf)
@@ -35,7 +37,7 @@ int clean_in_buf(input_buffer *in_buf)
 	int j = 0;
 	int in_arg = FALSE;
 
-	while (j < INPUT_BUFFER_LENGTH && in_buf->buffer[j] != '\0')
+	while (j < in_buf->length && in_buf->buffer[j] != '\0')
 	{
 		if (in_buf->buffer[j] == ' ' || 
 				in_buf->buffer[j] == '\t' || 
@@ -57,14 +59,18 @@ int clean_in_buf(input_buffer *in_buf)
 		}
 	}
 	in_buf->buffer[i] = '\0';
+	in_buf->length = i;
 	return i;
 }
 
-int setup_args(int len, const input_buffer *in_buf, char **argv)
+// finds null char seperated args in in_buf
+// saves a pointer to each arg in argv
+// returns the number of args found
+int setup_args(const input_buffer *in_buf, char **argv)
 {
 	int i, j;
 	int in_arg = FALSE;
-	for (i = j = 0; i < len; i++)
+	for (i = j = 0; i < in_buf->length; i++)
 	{
 		if (in_buf->buffer[i] != '\0')
 		{
@@ -86,7 +92,7 @@ int setup_args(int len, const input_buffer *in_buf, char **argv)
 
 void clear_args(char **argv)
 {
-	k_memset(argv, 0, INPUT_BUFFER_LENGTH*sizeof(char *));
+	k_memset(argv, 0, INPUT_BUFFER_MAX_LENGTH*sizeof(char *));
 }
 
 void print_commands(WINDOW *wnd)
@@ -101,6 +107,7 @@ void print_commands(WINDOW *wnd)
 	}
 }
 
+// prints characters or removes characters if backspace was pressed
 void win_printc(WINDOW *wnd, char c)
 {
 	if (c == '\b')
@@ -113,34 +120,35 @@ void win_printc(WINDOW *wnd, char c)
 	}
 }
 
-// returns the length of the command buffer used
+// returns the number of caracters input
 // formats the command buffer to contain non-white space characters separated by the null char
-// prints the entered characters and returns when the command buffer is filled or \n or \r received
+// prints the entered characters and returns when \n or \r is received
 int get_input(input_buffer *in_buf)
 {
-	int i = 0;
-	char c = '\0';
+	char c;
 	Keyb_Message msg;
 	msg.key_buffer = &c;
 
-	while(i < INPUT_BUFFER_LENGTH && c != '\n' && c != '\r')
+	do 
 	{
 		// get new character
 		send(keyb_port, (void *)&msg);
 
-		if (c == '\b' && i > 0)
+		if (c == '\b' && in_buf->length > 0)
 		{
-			in_buf->buffer[--i] = '\0';
+			in_buf->buffer[--in_buf->length] = '\0';
 			win_printc(shell_window, c);
 		}
-		else if (c != '\b')
+		else if (c != '\b' && in_buf->length < INPUT_BUFFER_MAX_LENGTH)
 		{
-			in_buf->buffer[i++] = c;
+			in_buf->buffer[in_buf->length++] = c;
 			win_printc(shell_window, c);
 		}
-	}
-	in_buf->buffer[i] = '\0';
-	return i;
+	} 
+	while(c != '\n' && c != '\r');
+
+	in_buf->buffer[in_buf->length] = '\0';
+	return in_buf->length;
 }
 
 command* find_command(input_buffer *in_buf)
@@ -161,7 +169,7 @@ void shell_process(PROCESS proc, PARAM param)
 	int i;
 	command *c;
 	input_buffer in_buf;
-	char *argv[INPUT_BUFFER_LENGTH];
+	char *argv[INPUT_BUFFER_MAX_LENGTH];
 
 	while(1)
 	{
@@ -169,7 +177,7 @@ void shell_process(PROCESS proc, PARAM param)
 
 		get_input(&in_buf);
 
-		i = clean_in_buf(&in_buf);
+		clean_in_buf(&in_buf);
 
 		c = find_command(&in_buf);
 
@@ -179,10 +187,9 @@ void shell_process(PROCESS proc, PARAM param)
 		}
 		else
 		{
-
 			clear_args(argv);
 
-			i = setup_args(i, &in_buf, argv);
+			i = setup_args(&in_buf, argv);
 
 			// run command
 			i = (c->func)(i, argv);
@@ -191,7 +198,6 @@ void shell_process(PROCESS proc, PARAM param)
 			if (i != 0)
 				wprintf(shell_window, "%s exited with error code %d\n", c->name, i);
 		}
-		k_memset(in_buf.buffer, 0, INPUT_BUFFER_LENGTH+1);
 	}
 }
 

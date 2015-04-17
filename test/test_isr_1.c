@@ -16,7 +16,8 @@
 MEM_ADDR screen_offset_for_timer_isr = 0xb8000 + 3 * 160 + 2 * 11;
 int counter = 10;
 
-void timer_isr ()
+void timer_isr ();
+void dummy_timer_isr ()
 {
     /*
      *		push	%eax		; Push context
@@ -27,6 +28,7 @@ void timer_isr ()
      *          push    %esi
      *          push    %edi
      */
+    asm ("timer_isr:");
     asm ("push %eax");
     asm ("push %ecx");
     asm ("push %edx");

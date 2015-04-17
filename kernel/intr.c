@@ -65,20 +65,10 @@ void dummy_isr_timer ()
 
     p = interrupt_table[TIMER_IRQ];
 
-    if (p != NULL)
-    {
-        // kprintf("enter timer\n");
-        
-        if (p->state != STATE_INTR_BLOCKED) {
-            // kprintf("process number %d not INTR_BLOCKED", p - pcb);
-            // print_all_processes(kernel_window);
-            panic ("service_intr_0x60: No process waiting");
-        }
-        
+    if (p != NULL && p->state == STATE_INTR_BLOCKED)
+    {        
         /* Add event handler to ready queue */
         add_ready_queue (p);
-
-        interrupt_table[TIMER_IRQ] = NULL;
     }
 
     active_proc = dispatcher();
@@ -141,8 +131,6 @@ void dummy_isr_com1 ()
     /* Add event handler to ready queue */
     add_ready_queue (p);
 
-    interrupt_table[COM1_IRQ] = NULL;
-
     active_proc = dispatcher();
 
     /* Restore context pointer ESP */
@@ -201,8 +189,6 @@ void dummy_isr_keyb()
 
     /* Add event handler to ready queue */
     add_ready_queue (p);
-
-    interrupt_table[KEYB_IRQ] = NULL;
 
     active_proc = dispatcher();
 
@@ -327,6 +313,10 @@ void wait_for_interrupt (int intr_no)
     ENABLE_INTR(saved_if);
 
     resign();
+
+    DISABLE_INTR(saved_if);
+    if (interrupt_table[intr_no] == active_proc) interrupt_table[intr_no] = NULL;
+    ENABLE_INTR(saved_if);
 }
 
 
@@ -366,6 +356,8 @@ void init_interrupts()
 {
     int i;
 
+    load_idt(idt);
+
     for(i = 0; i < 16; i++)
     {
         init_idt_entry(i, isr_panic);
@@ -378,8 +370,6 @@ void init_interrupts()
     init_idt_entry(TIMER_IRQ, isr_timer);
     init_idt_entry(KEYB_IRQ, isr_keyb);
     init_idt_entry(COM1_IRQ, isr_com1);
-
-    load_idt(idt);
 
     re_program_interrupt_controller();
 

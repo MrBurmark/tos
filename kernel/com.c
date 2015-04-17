@@ -52,11 +52,18 @@ void com_process (PROCESS self, PARAM param)
 
         message(com_reader_port, (void *)msg);
 
+        kprintf("%s\n", msg->output_buffer);
+
         // write
         for(i = 0; msg->output_buffer[i] != '\0'; i++)
         {
+            kprintf("%c", msg->output_buffer[i]);
+
             while (!(inportb(COM1_PORT+5) & (1<<5)));
+
             outportb(COM1_PORT, msg->output_buffer[i]);
+
+            kprintf("%c", msg->output_buffer[i]);
         }
 
         // wait for reader to finish
@@ -108,5 +115,7 @@ void init_uart()
 
 void init_com ()
 {
+    init_uart();
+
     com_port = create_process(com_process, 6, 0, "COM_process");
 }

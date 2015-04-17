@@ -62,6 +62,7 @@ void move_cursor(WINDOW* wnd, int x, int y);
 void remove_cursor(WINDOW* wnd);
 void show_cursor(WINDOW* wnd);
 void clear_window(WINDOW* wnd);
+void remove_char(WINDOW* wnd);
 void output_char(WINDOW* wnd, unsigned char ch);
 void output_string(WINDOW* wnd, const char *str);
 void wprintf(WINDOW* wnd, const char* fmt, ...);

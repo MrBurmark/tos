@@ -1,8 +1,28 @@
 
 #include <kernel.h>
 
+typedef struct _buffer_window
+{
+	unsigned char buffer[2 * WINDOW_TOTAL_WIDTH * WINDOW_TOTAL_HEIGHT];
+} buffer_window;
 
-/* sets the currect cursor location to black */
+buffer_window kernel_buffer_window;
+
+void write_char(int offset, unsigned char c)
+{
+	char d = c;
+	if (c == '\t' || c == '\r' || c == '\n')
+		d = ' ';
+	poke_w((MEM_ADDR)((WORD*)WINDOW_BASE_ADDR + offset), d | 0x0F00);
+	poke_w((MEM_ADDR)((WORD*)kernel_buffer_window.buffer + offset), c | 0x0F00);
+}
+
+unsigned char read_char(int offset)
+{
+	return peek_b((MEM_ADDR)((WORD*)kernel_buffer_window.buffer + offset));
+}
+
+/* sets the currect cursor location to black ' ' */
 void move_cursor(WINDOW* wnd, int x, int y)
 {
 	volatile int saved_if;
@@ -23,8 +43,7 @@ void remove_cursor(WINDOW* wnd)
 	volatile int saved_if;
 	DISABLE_INTR(saved_if);
 
-	WORD *cl = (WORD*)WINDOW_BASE_ADDR + WINDOW_OFFSET(wnd, wnd->cursor_x, wnd->cursor_y);
-	poke_w((MEM_ADDR)cl, ' ' | 0x0F00);
+	write_char(WINDOW_OFFSET(wnd, wnd->cursor_x, wnd->cursor_y), ' ');
 
 	ENABLE_INTR(saved_if); 
 }
@@ -35,8 +54,7 @@ void show_cursor(WINDOW* wnd)
 	volatile int saved_if;
 	DISABLE_INTR(saved_if);
 
-	WORD *cl = (WORD*)WINDOW_BASE_ADDR + WINDOW_OFFSET(wnd, wnd->cursor_x, wnd->cursor_y);
-	poke_w((MEM_ADDR)cl, wnd->cursor_char | 0x0F00);
+	write_char(WINDOW_OFFSET(wnd, wnd->cursor_x, wnd->cursor_y), wnd->cursor_char);
 
 	ENABLE_INTR(saved_if); 
 }
@@ -48,13 +66,13 @@ void clear_window(WINDOW* wnd)
 	DISABLE_INTR(saved_if);
 
 	int offset_to_next_line = WINDOW_TOTAL_WIDTH - wnd->width;
-	WORD *h_end, *w_end;
-	WORD *cl = (WORD*)WINDOW_BASE_ADDR + WINDOW_OFFSET(wnd, 0, 0);
-	for (h_end = cl + wnd->height * WINDOW_TOTAL_WIDTH; cl < h_end; cl += offset_to_next_line)
+	int h_end, w_end;
+	int offset = WINDOW_OFFSET(wnd, 0, 0);
+	for (h_end = offset + wnd->height * WINDOW_TOTAL_WIDTH; offset < h_end; offset += offset_to_next_line)
 	{
-		for (w_end = cl + wnd->width; cl < w_end; cl++)
+		for (w_end = offset + wnd->width; offset < w_end; offset++)
 		{
-			poke_w((MEM_ADDR)cl, ' ' | 0x0F00);
+			write_char(offset, ' ');
 		}
 	}
 	move_cursor(wnd, 0, 0);
@@ -67,16 +85,19 @@ void clear_window(WINDOW* wnd)
 /* if cursor would move offscreen it is reset to position 0,0 */
 BOOL scroll_window(WINDOW* wnd, int lines)
 {
-	WORD *dst = (WORD*)WINDOW_BASE_ADDR + WINDOW_OFFSET(wnd, 0, 0);
-	WORD *src = dst + lines * WINDOW_TOTAL_WIDTH;
-	WORD *end = dst + wnd->height * WINDOW_TOTAL_WIDTH;
+	int i;
+	int dst = WINDOW_OFFSET(wnd, 0, 0);
+	int src = dst + lines * WINDOW_TOTAL_WIDTH;
+	int end = dst + wnd->height * WINDOW_TOTAL_WIDTH;
 	for( ; src < end; src += WINDOW_TOTAL_WIDTH, dst += WINDOW_TOTAL_WIDTH)
 	{
-		k_memcpy(dst, src, wnd->width * sizeof(WORD));
+		for(i = 0; i < wnd->width; i++)
+			write_char(dst + i, read_char(src + i));
 	}
 	for( ; dst < end; dst += WINDOW_TOTAL_WIDTH)
 	{
-		k_memset(dst, 0x00, wnd->width * sizeof(WORD));
+		for(i = 0; i < wnd->width; i++)
+			write_char(dst + i, ' ');
 	}
 
 	if (wnd->cursor_y - lines >= 0)
@@ -91,23 +112,82 @@ BOOL scroll_window(WINDOW* wnd, int lines)
 	}
 }
 
+void remove_char(WINDOW* wnd)
+{
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
+
+	unsigned char c;
+
+	if (wnd->cursor_x != 0)
+	{
+		// removing within a single line
+		c = read_char(WINDOW_OFFSET(wnd, wnd->cursor_x - 1, wnd->cursor_y));
+		// remove single character
+		move_cursor(wnd, wnd->cursor_x - 1, wnd->cursor_y);
+
+		if (c == '\t')
+		{
+			c = read_char(WINDOW_OFFSET(wnd, wnd->cursor_x - 1, wnd->cursor_y));
+			// removing tabs
+			while (c == '\t' && wnd->cursor_x % TAB_SIZE != 0)
+			{
+				move_cursor(wnd, wnd->cursor_x - 1, wnd->cursor_y);
+				c = read_char(WINDOW_OFFSET(wnd, wnd->cursor_x - 1, wnd->cursor_y));
+			}
+		}
+	}
+	else if (wnd->cursor_y > 0)
+	{
+		// removing on previous line if it exists
+		c = read_char(WINDOW_OFFSET(wnd, wnd->width - 1, wnd->cursor_y - 1));
+		// move cursor to end of new line, removing single character
+		move_cursor(wnd, wnd->width - 1, wnd->cursor_y - 1);
+
+		if (c == '\n' || c == '\r')
+		{
+			c = read_char(WINDOW_OFFSET(wnd, wnd->cursor_x - 1, wnd->cursor_y));
+			// removing newlines
+			while ((c == '\n' || c == '\r') && wnd->cursor_x > 0)
+			{
+				move_cursor(wnd, wnd->cursor_x - 1, wnd->cursor_y);
+				c = read_char(WINDOW_OFFSET(wnd, wnd->cursor_x - 1, wnd->cursor_y));
+			}
+		}
+		else if (c == '\t')
+		{
+			c = read_char(WINDOW_OFFSET(wnd, wnd->cursor_x - 1, wnd->cursor_y));
+			// removing tabs
+			while (c == '\t' && wnd->cursor_x % TAB_SIZE != 0)
+			{
+				move_cursor(wnd, wnd->cursor_x - 1, wnd->cursor_y);
+				c = read_char(WINDOW_OFFSET(wnd, wnd->cursor_x - 1, wnd->cursor_y));
+			}
+		}
+	}
+
+	ENABLE_INTR(saved_if); 
+}
 
 void output_char(WINDOW* wnd, unsigned char c)
 {
 	volatile int saved_if;
 	DISABLE_INTR(saved_if);
 
+	int i;
 	int write = TRUE;
-	WORD *cl;
+	int offset;
+	int cursor_old_x = wnd->cursor_x;
+	// int cursor_old_y = wnd->cursor_y;
 	int cursor_new_x = wnd->cursor_x;
 	int cursor_new_y = wnd->cursor_y;
+
 	switch (c)
 	{
 		case '\n':
 		case '\r':
 			cursor_new_x = 0;
 			cursor_new_y++;
-			write = FALSE;
 			break;
 		case '\t':
 			cursor_new_x += TAB_SIZE - cursor_new_x % TAB_SIZE;
@@ -116,7 +196,6 @@ void output_char(WINDOW* wnd, unsigned char c)
 				cursor_new_x = 0;
 				cursor_new_y++;
 			}
-			write = FALSE;
 			break;
 		default:
 			cursor_new_x++;
@@ -130,19 +209,30 @@ void output_char(WINDOW* wnd, unsigned char c)
 
 	if (cursor_new_y >= wnd->height)
 	{
-		write = !scroll_window(wnd, cursor_new_y - wnd->height + 1) && write;
+		write = !scroll_window(wnd, cursor_new_y - wnd->height + 1);
 		cursor_new_y -= cursor_new_y - wnd->height + 1;
 	}
-	/* save current cursor address before move_cursor */
-	cl = (WORD*)WINDOW_BASE_ADDR + WINDOW_OFFSET(wnd, wnd->cursor_x, wnd->cursor_y);
 
-	assert(cursor_new_x >= 0 && cursor_new_x < wnd->width && cursor_new_y >= 0 && cursor_new_y < wnd->height);
-	assert((LONG)cl >= WINDOW_BASE_ADDR && (LONG)cl < WINDOW_BASE_ADDR + 80*25*2);
-
-	move_cursor(wnd, cursor_new_x, cursor_new_y);
-	
 	if (write)
-		poke_w((MEM_ADDR)cl, c | 0x0F00);
+	{
+		/* save current cursor address before move_cursor */
+		offset = WINDOW_OFFSET(wnd, wnd->cursor_x, wnd->cursor_y);
+
+		move_cursor(wnd, cursor_new_x, cursor_new_y);
+
+		if (cursor_new_x == 0)
+		{
+			// writing across a line, fill rest of line with said char
+			for(i = 0; i + cursor_old_x < wnd->width; i++)
+				write_char(offset + i, c);
+		}
+		else
+		{
+			// writing within a line, fill till get to new position
+			for(i = 0; i + cursor_old_x < cursor_new_x; i++)
+				write_char(offset + i, c);
+		}
+	}
 
 	ENABLE_INTR(saved_if); 
 }
@@ -161,7 +251,6 @@ void output_string(WINDOW* wnd, const char *str)
 	
 	ENABLE_INTR(saved_if); 
 }
-
 
 
 /*

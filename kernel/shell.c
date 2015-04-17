@@ -7,14 +7,12 @@ WINDOW* shell_window = &shell_window_def;
 
 #define MAX_COMMANDS 32
 
-// commands use a similar interface to c programs
-// here argc is the length of the buffer argv
-// argv contains arguments separated by null chars and null terminated
+// commands use the same interface as c programs
 // a command shall be unused if it's function pointer is NULL
 typedef struct _command
 {
 	char *name;
-	void (*func) (int argc, char **argv);
+	int (*func) (int argc, char **argv);
 	char *description;
 } command;
 command cmd[MAX_COMMANDS + 1];
@@ -25,8 +23,6 @@ typedef struct _input_buffer
 {
 	char buffer[INPUT_BUFFER_LENGTH + 1];
 } input_buffer;
-
-char *in_buf_buffer;
 
 void clear_in_buf(input_buffer *in_buf)
 {
@@ -126,7 +122,7 @@ int get_input(input_buffer *in_buf)
 	char c = '\0';
 	Keyb_Message msg;
 	msg.key_buffer = &c;
-	
+
 	while(i < INPUT_BUFFER_LENGTH && c != '\n' && c != '\r')
 	{
 		// get new character
@@ -167,27 +163,15 @@ void shell_process(PROCESS proc, PARAM param)
 	input_buffer in_buf;
 	char *argv[INPUT_BUFFER_LENGTH];
 
-	in_buf_buffer = in_buf.buffer;
-
 	while(1)
 	{
 		clear_in_buf(&in_buf);
 
 		get_input(&in_buf);
 
-		// wprintf(shell_window, "%s", in_buf.buffer);
-
 		i = clean_in_buf(&in_buf);
 
-		// wprintf(shell_window, "%s %s\n", in_buf.buffer, in_buf.buffer + 5);
-
-		// wprintf(shell_window, "input size %d\n", i);
-
 		c = find_command(&in_buf);
-
-		// wprintf(shell_window, "%s\n", c->name);
-
-		// print_commands(shell_window);
 
 		if (c->func == NULL)
 		{
@@ -195,57 +179,67 @@ void shell_process(PROCESS proc, PARAM param)
 		}
 		else
 		{
-			// wprintf(shell_window, "%s\n", c->name);
 
 			clear_args(argv);
 
 			i = setup_args(i, &in_buf, argv);
 
-			(c->func)(i, argv);
+			// run command
+			i = (c->func)(i, argv);
+
+			// check for error code returned
+			if (i != 0)
+				wprintf(shell_window, "%s exited with error code %d\n", c->name, i);
 		}
 		k_memset(in_buf.buffer, 0, INPUT_BUFFER_LENGTH+1);
 	}
 }
 
-void print_commands_func(int argc, char **argv)
+int print_commands_func(int argc, char **argv)
 {
 	print_commands(shell_window);
+	return 0;
 }
 
-void print_process_func(int argc, char **argv)
+int print_process_func(int argc, char **argv)
 {
 	print_all_processes(shell_window);
+	return 0;
 }
 
-void sleep_func(int argc, char **argv)
+int sleep_func(int argc, char **argv)
 {
 	if (argc > 1)
 	{
 		wprintf(shell_window, "Sleeping: ");
 		sleep(atoi(argv[1]));
 		wprintf(shell_window, "woke after %d\n", atoi(argv[1]));
+		return 0;
 	}
 	else
 	{
 		wprintf(shell_window, "Missing argument to sleep\n");
+		return 1;
 	}
 }
 
-void clear_func(int argc, char **argv)
+int clear_func(int argc, char **argv)
 {
 	clear_window(shell_window);
+	return 0;
 }
 
-void echo_func(int argc, char **argv)
+int echo_func(int argc, char **argv)
 {
 	int i = 1;
 	while (i < argc)
 		wprintf(shell_window, "%s ", argv[i++]);
 	if (argc > 1)
 		wprintf(shell_window, "\n");
+	return 0;
 }
 
-void pacman_func(int argc, char **argv)
+int pacman_func(int argc, char **argv)
 {
 	WINDOW pacman_window;
 	pacman_window.x = WINDOW_TOTAL_WIDTH - MAZE_WIDTH;
@@ -256,12 +250,16 @@ void pacman_func(int argc, char **argv)
 	{
 		wprintf(shell_window, "Starting pacman with %d ghosts\n", atoi(argv[1]));
 		init_pacman(&pacman_window, atoi(argv[1]));
+		return 0;
 	}
 	else
+	{
 		wprintf(shell_window, "Missing argument to pacman\n");
+		return 1;
+	}
 }
 
-BOOL init_command(char *name, void (*func) (int argc, char **argv), char *description, int i) 
+BOOL init_command(char *name, int (*func) (int argc, char **argv), char *description, int i) 
 {
 	if (i >= MAX_COMMANDS) 
 	{

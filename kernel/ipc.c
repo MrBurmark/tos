@@ -49,6 +49,62 @@ PORT create_new_port (PROCESS owner)
 	return p;
 }
 
+// deallocates all ports associated with a process
+void remove_ports (PROCESS owner)
+{
+	PORT p, p_tmp;
+
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
+
+	assert(owner->magic == MAGIC_PCB);
+
+	p = owner->first_port;
+	while (p != NULL)
+	{
+		/* Initialize PORT */
+		p->magic 				= ~MAGIC_PORT;
+		p->used 				= FALSE;
+		p->open 				= TRUE;
+		p->owner 				= NULL;
+		p->blocked_list_head 	= NULL;
+	    p->blocked_list_tail 	= NULL;
+	    p_tmp = p->next;
+	    p->next 				= NULL;
+	    p = p_tmp;
+	}
+
+	ENABLE_INTR(saved_if);
+}
+
+// returns true if a message is waiting
+// false otherwise, checks closed ports
+BOOL check_messages (PROCESS proc)
+{
+	BOOL found = FALSE;
+
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
+
+	/* Find first message waiting */
+	PORT p = proc->first_port;
+	while(p != NULL)
+	{
+		if (p->blocked_list_head != NULL)
+		{
+			/* Found message */
+			/* remove that process from blocked list */
+			found = TRUE;
+			break;
+		}
+		p = p->next;
+	}
+
+	ENABLE_INTR(saved_if);
+
+	return found;
+}
+
 
 void open_port (PORT port)
 {

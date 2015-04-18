@@ -1,34 +1,29 @@
 #include <kernel.h>
 
 
-// determines location to print primes
 static WINDOW shell_window_def = {0, 10, 80 - MAZE_WIDTH, 14, 0, 0, '_'};
-WINDOW* shell_window = &shell_window_def;
+WINDOW* shell_wnd = &shell_window_def;
 
-#define MAX_COMMANDS 32
+void win_printc(WINDOW *wnd, char c);
 
-// commands use the same interface as c programs
-// a command shall be unused if it's function pointer is NULL
-typedef struct _command
-{
-	char *name;
-	int (*func) (int argc, char **argv);
-	char *description;
-} command;
-command cmd[MAX_COMMANDS + 1];
-
-#define INPUT_BUFFER_MAX_LENGTH 160
+command shell_cmd[MAX_COMMANDS + 1];
 
 typedef struct _input_buffer
 {
+	BOOL used;
 	int length;
 	char buffer[INPUT_BUFFER_MAX_LENGTH + 1];
 } input_buffer;
+
+input_buffer history[SHELL_HISTORY_SIZE];
+input_buffer *history_head; // always points to a new buffer
+input_buffer *history_current; // always points to the buffer displayed on screen
 
 void clear_in_buf(input_buffer *in_buf)
 {
 	k_memset(in_buf->buffer, 0, INPUT_BUFFER_MAX_LENGTH + 1);
 	in_buf->length = 0;
+	in_buf->used = FALSE;
 }
 
 int clean_in_buf(input_buffer *in_buf)
@@ -37,12 +32,13 @@ int clean_in_buf(input_buffer *in_buf)
 	int j = 0;
 	int in_arg = FALSE;
 
-	while (j < in_buf->length && in_buf->buffer[j] != '\0')
+	while (j < in_buf->length)
 	{
 		if (in_buf->buffer[j] == ' ' || 
 				in_buf->buffer[j] == '\t' || 
 				in_buf->buffer[j] == '\n' || 
-				in_buf->buffer[j] == '\r')
+				in_buf->buffer[j] == '\r' ||
+				in_buf->buffer[i] == '\0')
 		{
 			// skip white space
 			if (in_arg == TRUE)
@@ -62,6 +58,85 @@ int clean_in_buf(input_buffer *in_buf)
 	in_buf->length = i;
 	return i;
 }
+
+void history_up()
+{
+	int i;
+	input_buffer *next = history + ((history_current - history - 1) % SHELL_HISTORY_SIZE);
+	if (next->used && next != history_head)
+	{
+		// if next buffer used and not back to head
+
+		// clear screen of current data
+		for(i = 0; i < history_current->length; i++)
+		{
+			win_printc(shell_wnd, '\b');
+		}
+
+		// add new data
+		history_current = next;
+		for(i = 0; i < history_current->length; i++)
+		{
+			win_printc(shell_wnd, history_current->buffer[i]);
+		}
+	}
+}
+
+void history_down()
+{
+	int i;
+	input_buffer *previous = history + ((history_current - history + 1) % SHELL_HISTORY_SIZE);
+	if (history_current != history_head)
+	{
+		// if not back to head
+
+		// clear screen of current data
+		for(i = 0; i < history_current->length; i++)
+		{
+			win_printc(shell_wnd, '\b');
+		}
+
+		// add new data
+		history_current = previous;
+		for(i = 0; i < history_current->length; i++)
+		{
+			win_printc(shell_wnd, history_current->buffer[i]);
+		}
+	}
+}
+
+
+void print_commands(WINDOW *wnd, const command *cmds)
+{
+	int i;
+
+	wprintf(wnd, "Available commands\n");
+
+	for (i = 0; cmds[i].func != NULL; i++)
+	{
+		wprintf(wnd, " - %s:\t%s\n", cmds[i].name, cmds[i].description);
+	}
+}
+
+command* find_command(const command *cmds, const char *in_name)
+{
+	for (; cmds->func != NULL; cmds++)
+	{
+		if (k_strcmp(cmds->name, in_name) == 0)
+		{
+			break;
+		}
+	}
+	return (command *)cmds;
+}
+
+void init_command(char *name, int (*func) (int argc, char **argv), char *description, command *cmd) 
+{
+	cmd->name = name;
+	cmd->func = func;
+	cmd->description = description;
+}
+
 
 // finds null char seperated args in in_buf
 // saves a pointer to each arg in argv
@@ -95,17 +170,6 @@ void clear_args(char **argv)
 	k_memset(argv, 0, INPUT_BUFFER_MAX_LENGTH*sizeof(char *));
 }
 
-void print_commands(WINDOW *wnd)
-{
-	int i;
-
-	wprintf(wnd, "Available commands\n");
-
-	for (i = 0; cmd[i].func != NULL; i++)
-	{
-		wprintf(wnd, " - %s:\t%s\n", cmd[i].name, cmd[i].description);
-	}
-}
 
 // prints characters or removes characters if backspace was pressed
 void win_printc(WINDOW *wnd, char c)
@@ -116,100 +180,125 @@ void win_printc(WINDOW *wnd, char c)
 	}
 	else
 	{
+		if (c == '\0') c = ' ';
 		wprintf(wnd, "%c", c);
 	}
 }
 
 // returns the number of caracters input
-// formats the command buffer to contain non-white space characters separated by the null char
+// formats the input buffer to contain non-white space characters separated by the null char
 // prints the entered characters and returns when \n or \r is received
-int get_input(input_buffer *in_buf)
+int get_input()
 {
 	char c;
 	Keyb_Message msg;
 	msg.key_buffer = &c;
+
+	history_current->used = TRUE;
 
 	do 
 	{
 		// get new character
 		send(keyb_port, (void *)&msg);
 
-		if (c == '\b' && in_buf->length > 0)
+		if (c == '\b' && history_current->length > 0)
 		{
-			in_buf->buffer[--in_buf->length] = '\0';
-			win_printc(shell_window, c);
+			// backspace received and can backspace
+			history_current->buffer[--history_current->length] = '\0';
+			win_printc(shell_wnd, c);
 		}
-		else if (c != '\b' && in_buf->length < INPUT_BUFFER_MAX_LENGTH)
+		else if (((c >= 32 && c < 127) || c == '\t')
+				 && history_current->length < INPUT_BUFFER_MAX_LENGTH)
 		{
-			in_buf->buffer[in_buf->length++] = c;
-			win_printc(shell_window, c);
+			// writable caracter received and can print
+			history_current->buffer[history_current->length++] = c;
+			win_printc(shell_wnd, c);
+		}
+		else
+		{
+			// non-writable
+			switch (c)
+			{
+				case TOS_UP:
+					history_up();
+					break;
+				case TOS_DOWN:
+					history_down();
+					break;
+			}
 		}
 	} 
 	while(c != '\n' && c != '\r');
 
-	in_buf->buffer[in_buf->length] = '\0';
-	return in_buf->length;
-}
+	wprintf(shell_wnd, "\n");
 
-command* find_command(input_buffer *in_buf)
-{
-	command *ci;
-	for (ci = cmd; ci->func != NULL; ci++)
-	{
-		if (k_strcmp(ci->name, in_buf->buffer) == 0)
-		{
-			break;
-		}
-	}
-	return ci;
+	history_current->buffer[history_current->length] = '\0';
+	return history_current->length;
 }
 
 void shell_process(PROCESS proc, PARAM param)
 {
 	int i;
-	command *c;
-	input_buffer in_buf;
+	command *cmd;
 	char *argv[INPUT_BUFFER_MAX_LENGTH];
+
+	wprintf(shell_wnd, "Welcome to the TOS shell\n");
 
 	while(1)
 	{
-		clear_in_buf(&in_buf);
+		wprintf(shell_wnd, "tos> ");
 
-		get_input(&in_buf);
+		clear_in_buf(history_current);
 
-		clean_in_buf(&in_buf);
+		get_input();
 
-		c = find_command(&in_buf);
+		clean_in_buf(history_current);
 
-		if (c->func == NULL)
+		cmd = find_command(shell_cmd, history_current->buffer);
+
+		if (history_current->buffer[0] == '\0')
 		{
-			wprintf(shell_window, "Unknown Command %s\n", in_buf.buffer);
+			// empty line, don't print
+			continue;
+		}
+		else if (cmd->func == NULL)
+		{
+			wprintf(shell_wnd, "Unknown Command: %s\n", history_current->buffer);
 		}
 		else
 		{
 			clear_args(argv);
 
-			i = setup_args(&in_buf, argv);
+			i = setup_args(history_current, argv);
 
 			// run command
-			i = (c->func)(i, argv);
+			i = (cmd->func)(i, argv);
 
 			// check for error code returned
 			if (i != 0)
-				wprintf(shell_window, "%s exited with code %d\n", c->name, i);
+				wprintf(shell_wnd, "%s exited with code %d\n", cmd->name, i);
 		}
+
+		// copy current to head if necessary
+		if (history_head != history_current)
+		{
+			*history_head = *history_current;
+		}
+		// move head and current along
+		history_head = history + ((history_head - history + 1) % SHELL_HISTORY_SIZE);
+		history_current = history_head;
 	}
 }
 
-int print_commands_func(int argc, char **argv)
+int print_shell_commands_func(int argc, char **argv)
 {
-	print_commands(shell_window);
+	print_commands(shell_wnd, shell_cmd);
 	return 0;
 }
 
 int print_process_func(int argc, char **argv)
 {
-	print_all_processes(shell_window);
+	print_all_processes(shell_wnd);
 	return 0;
 }
 
@@ -217,21 +306,21 @@ int sleep_func(int argc, char **argv)
 {
 	if (argc > 1)
 	{
-		wprintf(shell_window, "Sleeping: ");
+		wprintf(shell_wnd, "Sleeping: ");
 		sleep(atoi(argv[1]));
-		wprintf(shell_window, "woke after %d\n", atoi(argv[1]));
+		wprintf(shell_wnd, "woke after %d\n", atoi(argv[1]));
 		return 0;
 	}
 	else
 	{
-		wprintf(shell_window, "Missing argument to sleep\n");
+		wprintf(shell_wnd, "Usage: sleep num_of_ticks\n");
 		return 1;
 	}
 }
 
 int clear_func(int argc, char **argv)
 {
-	clear_window(shell_window);
+	clear_window(shell_wnd);
 	return 0;
 }
 
@@ -239,14 +328,15 @@ int echo_func(int argc, char **argv)
 {
 	int i = 1;
 	while (i < argc)
-		wprintf(shell_window, "%s ", argv[i++]);
+		wprintf(shell_wnd, "%s ", argv[i++]);
 	if (argc > 1)
-		wprintf(shell_window, "\n");
+		wprintf(shell_wnd, "\n");
 	return 0;
 }
 
 int pacman_func(int argc, char **argv)
 {
+	int i;
 	pacman_wnd->x = WINDOW_TOTAL_WIDTH - MAZE_WIDTH;
 	pacman_wnd->y = WINDOW_TOTAL_HEIGHT - MAZE_HEIGHT - 1;
 	pacman_wnd->width = MAZE_WIDTH;
@@ -256,28 +346,93 @@ int pacman_func(int argc, char **argv)
 
 	if (argc > 1)
 	{
-		wprintf(shell_window, "Starting pacman with %d ghosts\n", atoi(argv[1]));
-		init_pacman(pacman_wnd, atoi(argv[1]));
+		i = atoi(argv[1]);
+
+		if (i <= 0 || i > 5)
+		{
+			wprintf(shell_wnd, "Invalid number of ghosts %d\n", i);
+			return 2;
+		}
+
+		wprintf(shell_wnd, "Starting pacman with %d ghosts\n", i);
+		init_pacman(pacman_wnd, i);
 		return 0;
 	}
 	else
 	{
-		wprintf(shell_window, "Missing argument to pacman\n");
+		wprintf(shell_wnd, "Usage: pacman num_ghosts\n");
 		return 1;
 	}
 }
 
-BOOL init_command(char *name, int (*func) (int argc, char **argv), char *description, int i) 
+int prime_func(int argc, char **argv)
 {
-	if (i >= MAX_COMMANDS) 
+	if (argc == 1)
 	{
-		wprintf(shell_window, "Too many processes: not adding %s\n", name);
-		return FALSE;
+		wprintf(shell_wnd, "%d\n", null_prime);
 	}
-	cmd[i].name = name;
-	cmd[i].func = func;
-	cmd[i].description = description;
-	return TRUE;
+	else if (argc > 1)
+	{
+		if (is_num(argv[1]))
+		{
+			prime_reset = TRUE;
+			new_start = atoi(argv[1]);
+		}
+	}	
+	return 0;
+}
+
+int train_func(int argc, char **argv)
+{
+	Train_Message msg;
+
+	if (argc < 2)
+	{
+		wprintf(shell_wnd, "Usage: train cmd [args]\n");
+		return 1;
+	}
+	else
+	{
+		msg.argc = argc - 1;
+		msg.argv = &argv[1];
+		send(train_port, (void *)&msg);
+		return 0;
+	}
+}
+
+int kill_func(int argc, char **argv)
+{
+	BOOL force = FALSE;
+	int proc_num;
+
+	if (argc < 2)
+	{
+		wprintf(shell_wnd, "Usage: kill proc_num [-f]\n");
+		return 1;
+	}
+	else if (is_num(argv[1]))
+	{
+		proc_num = atoi(argv[1]);
+
+		if (argc >= 3)
+			if (k_strcmp("-f", argv[2]) == 0)
+				force = TRUE;
+
+		if (kill_process(pcb + proc_num, force))
+		{
+			wprintf(shell_wnd, "Kill Success\n");
+		} 
+		else
+		{
+			wprintf(shell_wnd, "Kill Failure\n");
+		}
+		return 0;
+	}
+	else
+	{
+		wprintf(shell_wnd, "Usage: kill proc_num [-f]\n");
+		return 1;
+	}
 }
 
 void init_shell()
@@ -285,23 +440,34 @@ void init_shell()
 	int i = 0;
 
 	// init used commands
-	init_command("help", print_commands_func, "Prints all commands", i++);
-	init_command("prtprc", print_process_func, "Prints all processes", i++);
-	init_command("sleep", sleep_func, "Sleeps for the given duration", i++);
-	init_command("clear", clear_func, "Clears the screen", i++);
-	init_command("echo", echo_func, "Prints its arguments", i++);
-	init_command("pacman", pacman_func, "Starts pacman with given number of ghosts", i++);
+	init_command("help", print_shell_commands_func, "Prints all commands", &shell_cmd[i++]);
+	init_command("prtprc", print_process_func, "Prints all processes", &shell_cmd[i++]);
+	init_command("sleep", sleep_func, "Sleeps for the given duration", &shell_cmd[i++]);
+	init_command("clear", clear_func, "Clears the screen", &shell_cmd[i++]);
+	init_command("echo", echo_func, "Prints its arguments", &shell_cmd[i++]);
+	init_command("pacman", pacman_func, "Starts pacman with given number of ghosts", &shell_cmd[i++]);
+	init_command("prime", prime_func, "Prints a prime computed by the null process", &shell_cmd[i++]);
+	init_command("train", train_func, "Train related commands, see train help", &shell_cmd[i++]);
+	init_command("kill", kill_func, "Kill a process", &shell_cmd[i++]);
 
 	// init unused commands
 	while (i < MAX_COMMANDS)
 	{
-		init_command("----", NULL, "unused", i++);
+		init_command("----", NULL, "unused", &shell_cmd[i++]);
 	}
-	cmd[MAX_COMMANDS].name = "NULL";
-	cmd[MAX_COMMANDS].func = NULL;
-	cmd[MAX_COMMANDS].description = "NULL";
+	shell_cmd[MAX_COMMANDS].name = "NULL";
+	shell_cmd[MAX_COMMANDS].func = NULL;
+	shell_cmd[MAX_COMMANDS].description = "NULL";
 
-	// print_commands(shell_window);
+	// init shell command history
+	for (i = 0; i < SHELL_HISTORY_SIZE; i++)
+	{
+		clear_in_buf(history + i);
+	}
+	history_head = history;
+	history_current = history;
 
 	create_process (shell_process, 3, 0, "Shell process");
+
+	init_train(train_wnd);
 }

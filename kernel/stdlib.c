@@ -74,3 +74,11 @@ int atoi(const char* str)
 	}
 	return num;
 }
+
+BOOL is_num(const char *str)
+{
+	if (*str >= '0' && *str <= '9')
+		return TRUE;
+	else 
+		return FALSE;
+}

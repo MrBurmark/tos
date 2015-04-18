@@ -138,10 +138,10 @@ void move_ghost(GHOST *ghost)
                 dy = -1;
                 break;
             case 2:
-                dx = -1;
+                dy = 1;
                 break;
             case 3:
-                dy = 1;
+                dx = -1;
                 break;
         }
     }

@@ -56,6 +56,25 @@ void add_ready_queue (PROCESS proc)
 }
 
 
+BOOL in_ready_queue(PROCESS proc)
+{
+	PROCESS rq_proc = ready_queue[proc->priority];
+	if (rq_proc != NULL)
+	{
+		// priority level has items
+		do
+		{
+		 	if (rq_proc == proc)
+		 	{
+		 		return TRUE;
+		 	}
+		 	rq_proc = rq_proc->next;
+		} 
+		while (rq_proc != ready_queue[proc->priority]);
+	}
+	return FALSE;
+}
+
 /*
  * remove_ready_queue
  *----------------------------------------------------------------------------
@@ -68,9 +87,14 @@ void remove_ready_queue (PROCESS proc)
 	volatile int saved_if;
 	DISABLE_INTR(saved_if);
 
-	assert(proc->priority < 8 && ready_queue[proc->priority] != NULL && proc->magic == MAGIC_PCB);
+	assert(proc->priority < 8 && proc->magic == MAGIC_PCB);
 
-	if(proc->next == proc) /* proc only process in queue */
+	if(!in_ready_queue(proc))
+	{
+		// not on ready queue
+		// do nothing
+	}
+	else if(proc->next == proc) /* proc only process in queue */
 	{
 		ready_queue[proc->priority] = NULL;
 	}
@@ -102,7 +126,7 @@ void remove_ready_queue (PROCESS proc)
 PROCESS dispatcher()
 {
 	int prio;
-	PROCESS proc;
+	PROCESS proc = NULL;
 	volatile int saved_if;
 	DISABLE_INTR(saved_if);
 
@@ -126,7 +150,6 @@ PROCESS dispatcher()
 	ENABLE_INTR(saved_if); 
 	return proc;
 }
-
 
 
 /*

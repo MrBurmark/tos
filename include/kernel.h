@@ -24,6 +24,7 @@ int k_memcmp(const void* b1, const void* b2, int len);
 int k_strcmp(const char* str1, const char* str2);
 void *k_memset(void *str, int c, int len);
 int atoi(const char* str);
+BOOL is_num(const char *str);
 
 /*=====>>> mem.c <<<========================================================*/
 
@@ -131,6 +132,7 @@ PORT create_process(void (*new_proc) (PROCESS, PARAM),
 #ifdef XXX
 PROCESS fork();
 #endif
+BOOL kill_process (PROCESS proc, BOOL force);
 void print_pcb(WINDOW* wnd, PROCESS p);
 void print_process(WINDOW* wnd, PROCESS p);
 void print_all_processes(WINDOW* wnd);
@@ -143,7 +145,6 @@ void init_process();
 extern PROCESS active_proc;
 extern PCB* ready_queue[];
 
-
 PROCESS dispatcher();
 void add_ready_queue (PROCESS proc);
 void remove_ready_queue (PROCESS proc);
@@ -153,8 +154,11 @@ void init_dispatcher();
 
 /*=====>>> null.c <<<=======================================================*/
 
-void init_null_process();
+extern volatile unsigned int null_prime;
+extern volatile BOOL prime_reset;
+extern volatile unsigned int new_start;
 
+void init_null_process();
 
 /*=====>>> ipc.c <<<========================================================*/
 
@@ -176,6 +180,8 @@ extern PORT_DEF port[];
 
 PORT create_port();
 PORT create_new_port (PROCESS proc);
+void remove_ports (PROCESS owner);
+BOOL check_messages (PROCESS proc);
 void open_port (PORT port);
 void close_port (PORT port);
 void send (PORT dest_port, void* data);
@@ -268,6 +274,10 @@ void init_com();
 
 /*=====>>> keyb.c <<<====================================================*/
 
+#define TOS_UP    17
+#define TOS_LEFT  18
+#define TOS_RIGHT 19
+#define TOS_DOWN  20
 #define KEYB_IRQ	0x61
 
 extern PORT keyb_port;
@@ -280,9 +290,34 @@ void init_keyb();
 
 /*=====>>> shell.c <<<===================================================*/
 
+#define MAX_COMMANDS 32
+#define INPUT_BUFFER_MAX_LENGTH 160
+#define SHELL_HISTORY_SIZE 32
+
+// commands use the same interface as c programs
+// a command shall be unused if it's function pointer is NULL
+typedef struct _command
+{
+    char *name;
+    int (*func) (int argc, char **argv);
+    char *description;
+} command;
+
+void print_commands(WINDOW *wnd, const command *commands);
+command* find_command(const command *commands, const char *in_name);
+void init_command(char *name, int (*func) (int argc, char **argv), char *description, command *command);
 void init_shell();
 
 /*=====>>> train.c <<<===================================================*/
+
+extern command train_cmd[];
+extern WINDOW* train_wnd;
+extern PORT train_port;
+
+typedef struct _Train_Message {
+    int argc;
+    char **argv;
+} Train_Message;
 
 void init_train(WINDOW* wnd);
 void set_train_speed(char* speed);

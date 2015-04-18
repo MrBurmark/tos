@@ -87,10 +87,10 @@ unsigned get_keycode (unsigned char ch)
 
     if (!brk) {
 
-	/* F1 to F12 */
-	if (!special && !brk && !alt) {
-	    if ((ch > 0x3A) && (ch < 59))
-		return ch*MULT;
+		/* F1 to F12 */
+		if (!special && !brk && !alt) {
+	    	if ((ch > 0x3A) && (ch < 59))
+				return ch*MULT;
         }
 	
 	
@@ -99,16 +99,23 @@ unsigned get_keycode (unsigned char ch)
         /* UP, DN, LF, RT */    
         /* If numlock off || arrow keys */
         if (special) {
-            if ((ch==0x48) || (ch==0x4B) || (ch==0x50) || (ch==0x4D)) 
-                return ch*MULT;
+            // if ((ch==0x48) || (ch==0x4B) || (ch==0x50) || (ch==0x4D)) 
+            //     return ch*MULT;
+            if (ch==0x48)
+            	return TOS_UP;
+            else if (ch==0x4B)
+            	return TOS_LEFT;
+            else if (ch==0x4D)
+            	return TOS_RIGHT;
+            else if (ch==0x50)
+            	return TOS_DOWN;
         }
 	
         /* INS, DEL, HM, END, PG-UP, PD-DN */
         if (special) {
-	    if ((ch==0x52) || (ch==0x47) || (ch==0x49) || (ch==0x53) ||
-		 (ch==0x4F) || (ch==0x51))
-		return ch*MULT;
-	    
+	    	if ((ch==0x52) || (ch==0x47) || (ch==0x49) || (ch==0x53) ||
+				 (ch==0x4F) || (ch==0x51))
+			return ch*MULT;
         }
 	
     }

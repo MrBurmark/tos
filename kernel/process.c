@@ -93,6 +93,47 @@ PORT create_process (void (*ptr_to_new_proc) (PROCESS, PARAM),
 	return prt;
 }
 
+BOOL kill_process (PROCESS proc, BOOL force)
+{
+	volatile int saved_if;
+	DISABLE_INTR(saved_if);
+
+	if ((active_proc != proc
+		 &&	proc->state == STATE_READY
+		 &&	!check_messages(proc)
+		 && proc->priority != 0)
+		 || force)
+	{
+		/* remove process from ready queue */
+		remove_ready_queue(proc);
+
+		/* Deallocate ports */
+		remove_ports(proc);
+
+		/* Deallocate PCB */
+		proc->magic 		= ~MAGIC_PCB;
+		proc->used 			= FALSE;
+		proc->state 		= -1;
+		proc->priority 		= 0;
+		proc->first_port 	= NULL;
+		proc->name 			= NULL;
+
+		/* destroy stack pointer */
+		proc->esp = NULL;
+
+		ENABLE_INTR(saved_if);
+
+		/* kill successful */
+		return TRUE;
+	}
+	else
+	{
+		ENABLE_INTR(saved_if);
+
+		/* kill failed */
+		return FALSE;
+	}
+}
 
 PROCESS fork()
 {

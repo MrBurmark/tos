@@ -290,18 +290,21 @@ void shell_process(PROCESS proc, PARAM param)
 	}
 }
 
+// prints the available shell commands to the shell window
 int print_shell_commands_func(int argc, char **argv)
 {
 	print_commands(shell_wnd, shell_cmd);
 	return 0;
 }
 
+// prints all processes to the shell window
 int print_process_func(int argc, char **argv)
 {
 	print_all_processes(shell_wnd);
 	return 0;
 }
 
+// causes the shell process to sleep for argv[1] amount of time
 int sleep_func(int argc, char **argv)
 {
 	if (argc > 1)
@@ -318,12 +321,14 @@ int sleep_func(int argc, char **argv)
 	}
 }
 
+// clears the shell window
 int clear_func(int argc, char **argv)
 {
 	clear_window(shell_wnd);
 	return 0;
 }
 
+// prints the arguments to the shell window
 int echo_func(int argc, char **argv)
 {
 	int i = 1;
@@ -334,6 +339,7 @@ int echo_func(int argc, char **argv)
 	return 0;
 }
 
+// starts pacman in the lower right corner of the screen
 int pacman_func(int argc, char **argv)
 {
 	int i;
@@ -365,6 +371,8 @@ int pacman_func(int argc, char **argv)
 	}
 }
 
+// prints a prime generated in the null process
+// if given an argument resets the prime currently being worked on in the null process to arg[1]
 int prime_func(int argc, char **argv)
 {
 	if (argc == 1)
@@ -382,6 +390,7 @@ int prime_func(int argc, char **argv)
 	return 0;
 }
 
+// sends commands to the train process
 int train_func(int argc, char **argv)
 {
 	Train_Message msg;
@@ -399,7 +408,11 @@ int train_func(int argc, char **argv)
 		return 0;
 	}
 }
-
+ 
+// kills the process corresponding to the number in argv[1]
+// does not kill the null process, or a process in any waiting state
+// or a process with a message in one of its ports
+// if argv[2] is -f forces kill
 int kill_func(int argc, char **argv)
 {
 	BOOL force = FALSE;
@@ -435,6 +448,8 @@ int kill_func(int argc, char **argv)
 	}
 }
 
+// initialises sheel commands and history buffers
+// creates shell process and inits train
 void init_shell()
 {
 	int i = 0;

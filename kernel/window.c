@@ -499,9 +499,6 @@ void vsprintf(char *buf, const char *fmt, va_list argp)
 
 void wprintf(WINDOW* wnd, const char *fmt, ...)
 {
-	// volatile int saved_if;
-	// DISABLE_INTR(saved_if);
-	
     va_list	argp;
     char	buf[160];
 
@@ -509,8 +506,6 @@ void wprintf(WINDOW* wnd, const char *fmt, ...)
     vsprintf(buf, fmt, argp);
     output_string(wnd, buf);
     va_end(argp);
-
-    // ENABLE_INTR(saved_if); 
 }
 
 
@@ -520,9 +515,6 @@ WINDOW* kernel_window = &kernel_window_def;
 
 void kprintf(const char *fmt, ...)
 {
-	// volatile int saved_if;
-	// DISABLE_INTR(saved_if);
-
     va_list	  argp;
     char	  buf[160];
 
@@ -530,8 +522,16 @@ void kprintf(const char *fmt, ...)
     vsprintf(buf, fmt, argp);
     output_string(kernel_window, buf);
     va_end(argp);
-
-    // ENABLE_INTR(saved_if);
 }
 
+int k_sprintf(char *str, const char *fmt, ...)
+{
+    va_list	  argp;
+    char	  buf[160];
 
+    va_start(argp, fmt);
+    vsprintf(str, fmt, argp);
+    va_end(argp);
+
+    return k_strlen(str);
+}

@@ -68,6 +68,7 @@ void output_char(WINDOW* wnd, unsigned char ch);
 void output_string(WINDOW* wnd, const char *str);
 void wprintf(WINDOW* wnd, const char* fmt, ...);
 void kprintf(const char* fmt, ...);
+int k_sprintf(char *str, const char *fmt, ...);
 
 
 /*=====>>> process.c <<<====================================================*/

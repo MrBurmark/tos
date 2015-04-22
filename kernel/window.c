@@ -527,7 +527,6 @@ void kprintf(const char *fmt, ...)
 int k_sprintf(char *str, const char *fmt, ...)
 {
     va_list	  argp;
-    char	  buf[160];
 
     va_start(argp, fmt);
     vsprintf(str, fmt, argp);

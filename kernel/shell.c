@@ -386,6 +386,10 @@ int prime_func(int argc, char **argv)
 			prime_reset = TRUE;
 			new_start = atoi(argv[1]);
 		}
+		else
+		{
+			return 1;
+		}
 	}	
 	return 0;
 }

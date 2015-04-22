@@ -119,7 +119,7 @@ BOOL kill_process (PROCESS proc, BOOL force)
 		proc->name 			= NULL;
 
 		/* destroy stack pointer */
-		proc->esp = NULL;
+		proc->esp = (MEM_ADDR)NULL;
 
 		ENABLE_INTR(saved_if);
 

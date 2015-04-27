@@ -9,7 +9,10 @@ command train_cmd[MAX_COMMANDS + 1];
 
 PORT train_port;
 
+unsigned int last_cmd_sent = 0;
+
 int train_cmd_pause = 15;
+int TOS_track_length_time_multiplier = 8000;
 int zamboni_search_ticks = 0;
 int zamboni_default_speed = 5;
 int tos_switch_length = 1;
@@ -25,10 +28,18 @@ int tos_capture_speed = 4;
 #define CARGO_CAR 5
 #define TOS_TRACK_NUMBER_SECTIONS 16
 #define TOS_TRACK_NUMBER_SWITCHES 9
+#define TOS_NUMBER_TRAINS 3
 
 // track pieces have an id and type
 // TRACK_SECTION: uses length, track1, track2
 // TRAIN_SWITCH: uses track_out, track_green, track_red
+// Track Assumptions:
+//  Track switches:
+//   track_out is never null 
+//   at least one of track_green or track_red is not null
+//   eventually surrounded by track sections
+//  Track Sections:
+//   only one end of a track segment may lead to null
 struct _track_piece;
 typedef struct _track_piece
 {
@@ -63,18 +74,37 @@ typedef struct _train_train
 	track_piece *position;
 	track_piece *destination;
 	track_piece *next;
+	track_piece *prev;
 } train_train;
-train_train TOS_trains[3];
 
 typedef struct _track_status
 {
-	unsigned char s88_clear;
+	unsigned char s88_clear : 1;
+	unsigned char setup		: 1;
 	unsigned char number_trains;
-	train_train *trains;
+	train_train trains[TOS_NUMBER_TRAINS];
 } track_status;
 track_status TOS_track_status;
 
+typedef struct _track_path
+{
+	int length;
+	track_piece *path[TOS_TRACK_NUMBER_SECTIONS + TOS_TRACK_NUMBER_SWITCHES];
+} track_path;
+
 track_piece *find_next_piece(track_piece *trk1, track_piece *trk2);
+
+void send_train_com_msg(COM_Message *msg)
+{
+	unsigned int time_since_last_cmd = get_TOS_time() - last_cmd_sent;
+
+	if ( time_since_last_cmd < train_cmd_pause )
+		sleep(train_cmd_pause - time_since_last_cmd);
+
+	send(com_port, msg);
+
+	last_cmd_sent = get_TOS_time();
+}
 
 // clears s88 memory in train controller, required before checking a segment
 void clear_s88(track_status *trk)
@@ -87,11 +117,9 @@ void clear_s88(track_status *trk)
 	
 	if (trk->s88_clear == FALSE)
 	{
-		send(com_port, &msg);
+		send_train_com_msg(&msg);
 		trk->s88_clear = TRUE;
 	}
-
-	sleep(train_cmd_pause);
 }
 
 // returns true if segment occupied, false otherwise
@@ -109,11 +137,9 @@ BOOL check_segment(track_status *trk, int segment)
 
 	clear_s88(trk);
 
-	send(com_port, &msg);
+	send_train_com_msg(&msg);
 
 	trk->s88_clear = FALSE;
-
-	sleep(train_cmd_pause);
 
 	return msg.input_buffer[1] == '1' ? TRUE : FALSE;
 }
@@ -132,11 +158,9 @@ BOOL set_speed(train_train *trn, int speed)
 
 	k_sprintf(msg.output_buffer, "L%dS%d\r", trn->id, speed);
 
-	send(com_port, &msg);
+	send_train_com_msg(&msg);
 
 	trn->speed = (unsigned char)speed;
-
-	sleep(train_cmd_pause);
 
 	return TRUE;
 }
@@ -144,6 +168,7 @@ BOOL set_speed(train_train *trn, int speed)
 // returns true if command could be executed, false otherwise
 BOOL change_direction(train_train *trn)
 {
+	track_piece *tmp;
 	COM_Message msg;
 	char out_buf[16];
 	msg.output_buffer = out_buf;
@@ -155,13 +180,51 @@ BOOL change_direction(train_train *trn)
 
 	k_sprintf(msg.output_buffer, "L%dD\r", trn->id);
 
-	send(com_port, &msg);
+	send_train_com_msg(&msg);
 
-	trn->next = find_next_piece(trn->position, trn->next);
-
-	sleep(train_cmd_pause);
+	tmp = trn->next;
+	trn->next = trn->prev;
+	trn->prev = tmp;
 
 	return TRUE;
+}
+
+void print_train(train_train *trn)
+{
+	wprintf(train_wnd, "id %d: spd %d, pos %s%d, dst %s%d, nxt %s%d, prv %s%d\n", 
+			trn->id, 
+			trn->speed, 
+			trn->position ? trn->position->type == TRACK_SWITCH ? "S" : "" : "", 
+			trn->position ? trn->position->id : 0, 
+			trn->destination ? trn->destination->type == TRACK_SWITCH ? "S" : "" : "", 
+			trn->destination ? trn->destination->id : 0, 
+			trn->next ? trn->next->type == TRACK_SWITCH ? "S" : "" : "", 
+			trn->next ? trn->next->id : 0, 
+			trn->prev ? trn->prev->type == TRACK_SWITCH ? "S" : "" : "", 
+			trn->prev ? trn->prev->id : 0 );
+}
+
+// updates the position and direction of a train that has just followed a path
+void update_position(train_train *trn, track_path *path)
+{
+	if (path->length > 1)
+	{
+		// moved far away
+		trn->next = find_next_piece(path->path[path->length-1], path->path[path->length-2]);
+		trn->prev = path->path[path->length-2];
+	}
+	else if (path->length == 1)
+	{
+		// moved to adjacent segment
+		trn->next = find_next_piece(path->path[path->length-1], trn->position);
+		trn->prev = trn->position;
+	}
+	else
+	{
+		// didn't move
+		return;
+	}
+	trn->position = path->path[path->length - 1];
 }
 
 // returns true if command could be executed, false otherwise
@@ -178,13 +241,14 @@ BOOL set_switch(track_piece *swt, unsigned char direction)
 	if ((direction != GREEN && direction != RED) || swt->type != TRACK_SWITCH)
 		return FALSE;
 
-	k_sprintf(msg.output_buffer, "M%d%c\r", swt->id, direction);
+	if (swt->direction != direction)
+	{
+		k_sprintf(msg.output_buffer, "M%d%c\r", swt->id, direction);
 
-	send(com_port, &msg);
+		send_train_com_msg(&msg);
 
-	swt->direction = direction;
-
-	sleep(train_cmd_pause);
+		swt->direction = direction;
+	}
 
 	return TRUE;
 }
@@ -304,7 +368,7 @@ void init_TOS_track_graph()
 	add_track_section(2, 3, TRACK_SWITCH, 3, TRACK_SECTION, 1);
 	add_track_section(3, 4, TRACK_SWITCH, 1, TRACK_SECTION, 4);
 	add_track_section(4, 4, TRACK_SWITCH, 4, TRACK_SECTION, 3);
-	add_track_section(5, 3, TRACK_SWITCH, 3, TRACK_SECTION, 4);
+	add_track_section(5, 3, TRACK_SWITCH, 3, UNKNOWN, 0);
 	add_track_section(6, 2, TRACK_SWITCH, 4, TRACK_SECTION, 7);
 	add_track_section(7, 4, TRACK_SWITCH, 5, TRACK_SECTION, 6);
 	add_track_section(8, 2, TRACK_SWITCH, 6, UNKNOWN, 0);
@@ -315,7 +379,7 @@ void init_TOS_track_graph()
 	add_track_section(13, 2, TRACK_SWITCH, 8, TRACK_SECTION, 14);
 	add_track_section(14, 2, TRACK_SWITCH, 9, TRACK_SECTION, 13);
 	add_track_section(15, 1, TRACK_SWITCH, 9, TRACK_SWITCH, 1);
-	add_track_section(16, 4, TRACK_SWITCH, 9, UNKNOWN, 0);
+	add_track_section(16, 6, TRACK_SWITCH, 9, UNKNOWN, 0);
 	add_track_switch(1, TRACK_SECTION, 15, TRACK_SECTION, 3, TRACK_SWITCH, 2);
 	add_track_switch(2, TRACK_SWITCH, 1, TRACK_SECTION, 1, TRACK_SECTION, 12);
 	add_track_switch(3, TRACK_SWITCH, 4, TRACK_SECTION, 2, TRACK_SECTION, 5);
@@ -353,7 +417,7 @@ typedef struct _BFS_node
 		{ \
 			node = GET_NODE_I(tp); \
 			if (node->used == TRUE && \
-				node->depth == i) \
+				node->depth == i - 1) \
 			{ \
 				trk_pc = tp; \
 				continue; \
@@ -361,9 +425,9 @@ typedef struct _BFS_node
 		}
 
 // takes track section src and dst and computes a path from src to dst using breadth first search
-// returns the length of the path, writes the path to path, src not included, dst included if dst != src
+// returns the length of the path, writes the path to path, src included, dst included if dst != src
 // returns -1 if no path from src to destination possible
-int BFS_path(const track_piece *src, const track_piece *dst, track_piece **path)
+void BFS_path(const track_piece *src, const track_piece *dst, track_path *path)
 {
 	int queue_start = 0;
 	int queue_end = 0;
@@ -376,13 +440,17 @@ int BFS_path(const track_piece *src, const track_piece *dst, track_piece **path)
 	k_memset(nodes, 0, (TOS_TRACK_NUMBER_SWITCHES + TOS_TRACK_NUMBER_SECTIONS) * sizeof(BFS_node));
 
 	if (src == dst)
-		return 0;
-
-	node = GET_NODE_I(queue[queue_start]);
+	{
+		path->length = 1;
+		path->path[0] = (track_piece *)src;
+		return;
+	}
 
 	queue[queue_end++] = (track_piece *)src;
+
+	node = GET_NODE_I(queue[queue_start]);
 	node->used = TRUE;
-	node->depth = 0;
+	node->depth = depth;
 
 	while(queue_start < queue_end)
 	{
@@ -404,7 +472,9 @@ int BFS_path(const track_piece *src, const track_piece *dst, track_piece **path)
 		}
 		else
 		{
-			return -1;
+			// should never happen
+			path->length = -1;
+			return;
 		}
 
 		queue_start++;
@@ -412,7 +482,11 @@ int BFS_path(const track_piece *src, const track_piece *dst, track_piece **path)
 
 	// no path found
 	if (queue_start >= queue_end)
-		return -1;
+	{
+		// should never happen
+		path->length = -1;
+		return;
+	}
 
 	// path found, copy it to path
 	queue_end--;
@@ -420,9 +494,9 @@ int BFS_path(const track_piece *src, const track_piece *dst, track_piece **path)
 	depth = node->depth;
 	trk_pc = queue[queue_end];
 
-	for (i = depth - 1; i > 0; i--)
+	for (i = depth; i > 0; i--)
 	{
-		path[i] = trk_pc;
+		path->path[i] = trk_pc;
 
 		if (trk_pc->type == TRACK_SECTION)
 		{
@@ -437,115 +511,339 @@ int BFS_path(const track_piece *src, const track_piece *dst, track_piece **path)
 		}
 		else
 		{
+			// should never happen
+			path->length = -1;
+			return;
+		}
+	}
+
+	path->path[0] = (track_piece *)src;
+
+	path->length = depth + 1;
+}
+
+void print_path(track_path *path)
+{
+	int i;
+	for(i = 0; i < path->length; i++)
+	{
+		if (path->path[i]->type == TRACK_SWITCH)
+		{
+			wprintf(train_wnd, "S%d ", path->path[i]->id);
+		}
+		else if (path->path[i]->type == TRACK_SECTION)
+		{
+			wprintf(train_wnd, "%d ", path->path[i]->id);
+		}
+	}
+	if (path->length > 0)
+		wprintf(train_wnd, "\n");
+}
+
+// returns an estimate of the time required to run this path
+int get_path_time(track_path *path, int speed)
+{
+	int i;
+	int path_time = 0;
+	if (speed > 5 || speed <= 0)
+		return -1;
+
+	if (path->length < 2)
+		return 0;
+
+	i = 0;
+	path_time += path->path[i]->length / 2;
+	i++;
+
+	for (; i < path->length - 1; i++)
+	{
+		if (path->path[i]->type == TRACK_SWITCH)
+		{
+			path_time += tos_switch_length;
+		}
+		else if (path->path[i]->type == TRACK_SECTION)
+		{
+			path_time += path->path[i]->length;
+		}
+		else
+		{
+			// should never run
 			return -1;
 		}
 	}
 
-	path[0] = trk_pc;
+	path_time += path->path[i]->length / 2;
+	i++;
 
-	return depth;
+	return path_time * TOS_track_length_time_multiplier / (speed * speed) ;
 }
 
 // finds a path up to the first turn around
 // alters path to head to first track section after the turn around
-// returns new length
-int turn_around_path(track_piece **path, int length)
+void turn_around_path(track_path *path)
 {
 	int i;
 
-	if (length == 0)
-		return 0;
-
-	for (i = 0; i < length; i++)
+	for (i = 0; i < path->length; i++)
 	{
-		if (path[i]->type == TRACK_SWITCH)
+		if (path->path[i]->type == TRACK_SWITCH)
 		{
 			// path never ends or starts on a switch
-			if ((path[i+1] == path[i]->track_green && path[i-1] == path[i]->track_red) || 
-				(path[i+1] == path[i]->track_red && path[i-1] == path[i]->track_green))
+			if ((path->path[i+1] == path->path[i]->track_green && path->path[i-1] == path->path[i]->track_red) || 
+				(path->path[i+1] == path->path[i]->track_red && path->path[i-1] == path->path[i]->track_green))
 			{
 				// turn-around
-				for (; path[i]->type != TRACK_SECTION; i++)
+				for (; path->path[i]->type != TRACK_SECTION; i++)
 				{
-					path[i+1] = find_next_piece(path[i], path[i-1]);
+					path->path[i+1] = find_next_piece(path->path[i], path->path[i-1]);
 				}
-				return i + 1;
+				path->length = i + 1;
 			}
 		}
 	}
-	return length;
+}
+
+// extends a path to the next track section
+void extend_path_one_section(track_path *path)
+{
+	int i;
+
+	if (path->length < 2)
+		return;
+
+	i = path->length - 1;
+	do
+	{
+		i++;
+		path->path[i] = find_next_piece(path->path[i-1], path->path[i-2]);
+	}
+	while (path->path[i] ? path->path[i]->type != TRACK_SECTION : 0);
+
+	if (path->path[i] != NULL)
+	{
+		// avoid adding segments that lead to a deadend
+		path->length = i + 1;
+	}
+}
+
+// reduces a path to the last track section before its end
+void reduce_path_one_section(track_path *path)
+{
+	int i;
+
+	if (path->length < 2)
+		return;
+
+	i = path->length - 1;
+	while (path->path[--i]->type != TRACK_SECTION);
+
+	path->length = i + 1;
 }
 
 // sets all the switches on the path to the correct setting
-void set_path_switches(track_piece **path, int length)
+void set_path_switches(track_path *path)
 {
 	int i;
-	for (i = 0; i < length; i++)
+	for (i = 0; i < path->length; i++)
 	{
-		if (path[i]->type == TRACK_SWITCH)
+		if (path->path[i]->type == TRACK_SWITCH)
 		{
-			// path never ends or starts on a switch
-			if (path[i+1] == path[i]->track_green)
+			// path never ends on a switch
+			if (path->path[i+1] == path->path[i]->track_green)
 			{
-				set_switch(path[i], GREEN);
+				set_switch(path->path[i], GREEN);
 			}
-			else if (path[i+1] == path[i]->track_red)
+			else if (path->path[i+1] == path->path[i]->track_red)
 			{
-				set_switch(path[i], RED);
+				set_switch(path->path[i], RED);
 			}
 		}
 	}
 }
 
-// only call on RED_TRAIN
-// moves a train to its destination
-int go_to_destination(train_train *trn)
+// move train to last, poll last until train appears
+BOOL move_train_poll(train_train *trn, int speed, track_path *path)
 {
-	int length;
-	track_piece *path[TOS_TRACK_NUMBER_SECTIONS + TOS_TRACK_NUMBER_SWITCHES];
+	if (path->length < 2)
+		return TRUE;
 
-	length = BFS_path(trn->position, trn->destination, path);
+	if (trn->prev == path->path[1])
+	{
+		change_direction(trn);
+	}
 
-	length = turn_around_path(path, length);
+	// move train
+	if (!set_speed(trn, speed))
+		return FALSE;
 
-	set_path_switches(path, length);
+	// wait until trn gets to track segment
+	while (check_segment(&TOS_track_status, path->path[path->length - 1]->id) == FALSE);
+
+	// stop at requested segment
+	set_speed(trn, 0);
+
+	update_position(trn, path);
+
+	return TRUE;
+}
+
+// move train to last, time train
+BOOL move_train_time(train_train *trn, int speed, track_path *path)
+{
+	if (path->length < 2)
+		return TRUE;
+
+	if (trn->prev == path->path[1])
+	{
+		change_direction(trn);
+	}
+
+	// move train
+	if (!set_speed(trn, speed))
+		return FALSE;
+
+	// wprintf(train_wnd, "estimated time %d\n", get_path_time(path, speed));
+
+	// wait until trn gets to track segment
+	sleep(get_path_time(path, speed));
+
+	// stop at requested segment
+	set_speed(trn, 0);
+
+	update_position(trn, path);
+
+	return TRUE;
+}
+
+// should only be called on RED_TRAIN
+// moves a train to its destination
+int go_to_destination_time(train_train *trn)
+{
+	track_path path;
+
+	BFS_path(trn->position, trn->destination, &path);
+
+	turn_around_path(&path);
+
+	set_path_switches(&path);
 
 	// follows this basic algorithm
 	// 1. find path
 	// 2. set switches
 	// 3. go to first turn around
-	// 4. stop and turn-around, repeat until path length 0
-	while (length > 0)
+	// 4. stop and turn-around, repeat until path length 1 (src == dst)
+	while (path.length > 1)
 	{
-		if (trn->next != path[0])
+		move_train_time(trn, 5, &path);
+
+		BFS_path(trn->position, trn->destination, &path);
+
+		turn_around_path(&path);
+
+		set_path_switches(&path);
+	}
+
+	return 0;
+}
+
+// should only be called on RED_TRAIN
+// moves a train to its destination
+int go_to_destination(train_train *trn)
+{
+	track_path path;
+
+	BFS_path(trn->position, trn->destination, &path);
+
+	turn_around_path(&path);
+
+	set_path_switches(&path);
+
+	// follows this basic algorithm
+	// 1. find path
+	// 2. set switches
+	// 3. go to first turn around
+	// 4. stop and turn-around, repeat until path length 1 (src == dst)
+	while (path.length > 1)
+	{
+		move_train_poll(trn, 5, &path);
+
+		BFS_path(trn->position, trn->destination, &path);
+
+		turn_around_path(&path);
+
+		set_path_switches(&path);
+	}
+
+	return 0;
+}
+
+// only call on RED_TRAIN
+// moves a train to the next section after its destination if it exists
+// else tries  to stop near the middle of the destination section
+int go_through_destination(train_train *trn)
+{
+	track_path path;
+
+	BFS_path(trn->position, trn->destination, &path);
+	turn_around_path(&path);
+	set_path_switches(&path);
+
+	// follows this basic algorithm
+	// 1. find path
+	// 2. set switches
+	// 3. go to first turn around
+	// 4. stop and turn-around, repeat until path length 1
+	while (path.length > 1)
+	{
+
+		if (path.path[path.length-1] == trn->destination)
 		{
-			change_direction(trn);
+			// if path ends at destination
+			reduce_path_one_section(&path);
+
+			// move train near destination
+			move_train_poll(trn, 5, &path);
+
+			// recalculate path
+			BFS_path(trn->position, trn->destination, &path);
+			set_path_switches(&path);
+
+			extend_path_one_section(&path);
+
+			if (path.path[path.length-1] != trn->destination)
+			{
+				// extension successful
+				move_train_poll(trn, 4, &path);
+			}
+			else
+			{
+				// deadend
+				move_train_time(trn, 4, &path);
+			}
+			break;
 		}
 
-		// move train
-		set_speed(trn, 5);
+		move_train_poll(trn, 5, &path);
 
-		// wait until trn gets to track segment
-		while (check_segment(&TOS_track_status, path[length - 1]->id) == FALSE);
-
-		// stop at requested segment
-		set_speed(trn, 0);
-
-		trn->position = path[length - 1];
-		trn->next = find_next_piece(path[length], path[length-1]);
-
-		length = BFS_path(trn->position, trn->destination, path);
-
-		length = turn_around_path(path, length);
-
-		set_path_switches(path, length);
+		BFS_path(trn->position, trn->destination, &path);
+		turn_around_path(&path);
+		set_path_switches(&path);
 	}
+
+	wprintf(train_wnd, "Got Cargo ");
 
 	return 0;
 }
 
 void reset_TOS_track()
 {
+	if (TOS_track_status.setup == FALSE)
+	{
+		TOS_track_status.s88_clear = FALSE;
+		TOS_track_status.setup     = TRUE;
+		TOS_track_status.number_trains = 0;
+	}
+
 	set_switch(&TOS_track_switches[1], GREEN);
 	set_switch(&TOS_track_switches[2], GREEN);
 	set_switch(&TOS_track_switches[3], GREEN);
@@ -557,16 +855,11 @@ void reset_TOS_track()
 	set_switch(&TOS_track_switches[9], RED);
 }
 
-BOOL set_up_TOS_track()
+BOOL find_TOS_configuration()
 {
 	int i;
 
 	reset_TOS_track();
-
-	TOS_track_status.s88_clear = FALSE;
-
-	TOS_track_status.number_trains = 0;
-	TOS_track_status.trains = TOS_trains;
 
 	// find engine
 	TOS_track_status.trains[TOS_track_status.number_trains].id = RED_TRAIN;
@@ -576,12 +869,14 @@ BOOL set_up_TOS_track()
 		TOS_track_status.trains[TOS_track_status.number_trains].position = &TOS_track_sections[8];
 		TOS_track_status.trains[TOS_track_status.number_trains].destination = &TOS_track_sections[8];
 		TOS_track_status.trains[TOS_track_status.number_trains].next = &TOS_track_switches[6];
+		TOS_track_status.trains[TOS_track_status.number_trains].prev = NULL;
 	}
 	else if (check_segment(&TOS_track_status, 5))
 	{
 		TOS_track_status.trains[TOS_track_status.number_trains].position = &TOS_track_sections[5];
 		TOS_track_status.trains[TOS_track_status.number_trains].destination = &TOS_track_sections[5];
 		TOS_track_status.trains[TOS_track_status.number_trains].next = &TOS_track_switches[3];
+		TOS_track_status.trains[TOS_track_status.number_trains].prev = NULL;
 	}
 	else
 	{
@@ -597,18 +892,21 @@ BOOL set_up_TOS_track()
 		TOS_track_status.trains[TOS_track_status.number_trains].position = &TOS_track_sections[2];
 		TOS_track_status.trains[TOS_track_status.number_trains].destination = &TOS_track_sections[8];
 		TOS_track_status.trains[TOS_track_status.number_trains].next = UNKNOWN;
+		TOS_track_status.trains[TOS_track_status.number_trains].prev = UNKNOWN;
 	}
 	else if (check_segment(&TOS_track_status, 11))
 	{
 		TOS_track_status.trains[TOS_track_status.number_trains].position = &TOS_track_sections[11];
 		TOS_track_status.trains[TOS_track_status.number_trains].destination = &TOS_track_sections[5];
 		TOS_track_status.trains[TOS_track_status.number_trains].next = UNKNOWN;
+		TOS_track_status.trains[TOS_track_status.number_trains].prev = UNKNOWN;
 	}
 	else if (check_segment(&TOS_track_status, 16))
 	{
 		TOS_track_status.trains[TOS_track_status.number_trains].position = &TOS_track_sections[16];
 		TOS_track_status.trains[TOS_track_status.number_trains].destination = &TOS_track_sections[5];
 		TOS_track_status.trains[TOS_track_status.number_trains].next = UNKNOWN;
+		TOS_track_status.trains[TOS_track_status.number_trains].prev = UNKNOWN;
 	}
 	else
 	{
@@ -627,10 +925,19 @@ BOOL set_up_TOS_track()
 			TOS_track_status.trains[TOS_track_status.number_trains].position = UNKNOWN;
 			TOS_track_status.trains[TOS_track_status.number_trains].destination = UNKNOWN;
 			TOS_track_status.trains[TOS_track_status.number_trains].next = UNKNOWN;
+			TOS_track_status.trains[TOS_track_status.number_trains].prev = UNKNOWN;
 			TOS_track_status.number_trains++;
 			break;
 		}
 	}
+
+	return TRUE;
+}
+
+BOOL setup_TOS_track()
+{
+	if (TOS_track_status.setup != TRUE)
+		find_TOS_configuration();
 
 	return TRUE;
 }
@@ -754,14 +1061,35 @@ int pause_func(int argc, char **argv)
 	return 0;
 }
 
+int time_multiplier_func(int argc, char **argv)
+{
+	if (argc == 1)
+	{
+		wprintf(train_wnd, "%d\n", TOS_track_length_time_multiplier);
+	}
+	else if (argc > 1)
+	{
+		if (is_num(argv[1]))
+		{
+			TOS_track_length_time_multiplier = atoi(argv[1]);
+		}
+		else
+		{
+			return 1;
+		}
+	}
+	return 0;
+}
+
 int goto_func(int argc, char **argv)
 {
 	int dst_id;
+	unsigned char use_time = FALSE;
 	train_train *red_train;
 
 	if (argc < 2)
 	{
-		wprintf(train_wnd, "Usage: goto destination_id\n");
+		wprintf(train_wnd, "Usage: goto destination_id [-t]\n");
 		return 1;
 	}
 	dst_id = atoi(argv[1]);
@@ -773,28 +1101,39 @@ int goto_func(int argc, char **argv)
 		return 2;
 	}
 
-	if (set_up_TOS_track() == FALSE)
+	if (setup_TOS_track() == FALSE)
 	{
 		wprintf(train_wnd, "Couldn't set up TOS track\n");
 		return 3;
+	}
+
+	if (argc > 2)
+	{
+		if (k_strcmp("-t", argv[2]) == 0)
+			use_time = TRUE;
 	}
 
 	red_train = &TOS_track_status.trains[0];
 
 	red_train->destination = &TOS_track_sections[dst_id];
 
-	go_to_destination(red_train);
+	if (use_time)
+		go_to_destination_time(red_train);
+	else
+		go_to_destination(red_train);
 
 	return 0;
 }
-
 
 int get_cargo_func(int argc, char **argv)
 {
 	train_train *red_train;
 	train_train *cargo_car;
 
-	if (set_up_TOS_track() == FALSE)
+	// forces full setup procedure
+	TOS_track_status.setup = FALSE;
+
+	if (find_TOS_configuration() == FALSE)
 	{
 		wprintf(train_wnd, "Couldn't set up TOS track\n");
 		return 1;
@@ -805,7 +1144,7 @@ int get_cargo_func(int argc, char **argv)
 
 	red_train->destination = cargo_car->position;
 
-	go_to_destination(red_train);
+	go_through_destination(red_train);
 
 	red_train->destination = cargo_car->destination;
 
@@ -828,8 +1167,9 @@ void init_train(WINDOW* wnd)
 	init_command("clear", clear_train_func, "Clears the train shell", &train_cmd[i++]);
 	init_command("cmd", run_command_func, "Runs a train command", &train_cmd[i++]);
 	init_command("pause", pause_func, "Prints the current pause or sets it when an argument is given", &train_cmd[i++]);
+	init_command("t_mult", time_multiplier_func, "Prints the current time multiplier or sets it when an argument is given", &train_cmd[i++]);
 	init_command("goto", goto_func, "send the red train to the destination", &train_cmd[i++]);
-	init_command("get_cargo", get_cargo_func, "red train links with the cargo car and returns to its starting location", &train_cmd[i++]);
+	init_command("gc", get_cargo_func, "red train links with the cargo car and returns to its starting location", &train_cmd[i++]);
 
 	// init unused commands
 	while (i < MAX_COMMANDS)
@@ -839,6 +1179,8 @@ void init_train(WINDOW* wnd)
 	train_cmd[MAX_COMMANDS].name = "NULL";
 	train_cmd[MAX_COMMANDS].func = NULL;
 	train_cmd[MAX_COMMANDS].description = "NULL";
+
+	TOS_track_status.setup = FALSE;
 
 	train_port = create_process (train_process, 3, 0, "Train process");
 }

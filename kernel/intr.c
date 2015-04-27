@@ -6,6 +6,8 @@ BOOL interrupts_initialized = FALSE;
 IDT idt [MAX_INTERRUPTS];
 PROCESS interrupt_table [MAX_INTERRUPTS];
 PROCESS p;
+// shouldn't overflow for about a month if 1000 timer interupts per second
+unsigned int _TOS_time = 0;
 
 
 void load_idt (IDT* base)
@@ -70,6 +72,8 @@ void dummy_isr_timer ()
         /* Add event handler to ready queue */
         add_ready_queue (p);
     }
+
+    _TOS_time++;
 
     active_proc = dispatcher();
 
@@ -350,6 +354,11 @@ void re_program_interrupt_controller ()
     asm ("movb $0x00,%al;outb %al,$0x21;call delay");
     // Don't mask IRQ for 8259A-2
     asm ("movb $0x00,%al;outb %al,$0xA1;call delay");
+}
+
+unsigned int get_TOS_time()
+{
+    return _TOS_time;
 }
 
 void init_interrupts()

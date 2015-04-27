@@ -224,6 +224,7 @@ typedef struct
 
 extern BOOL interrupts_initialized;
 
+unsigned int get_TOS_time();
 void init_idt_entry (int intr_no, void (*isr) (void));
 void wait_for_interrupt (int intr_no);
 void init_interrupts ();

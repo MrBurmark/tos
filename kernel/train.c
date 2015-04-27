@@ -9,6 +9,8 @@ command train_cmd[MAX_COMMANDS + 1];
 
 PORT train_port;
 
+volatile BOOL TOS_train_getting_cargo;
+
 unsigned int last_cmd_sent = 0;
 
 int train_cmd_pause = 15;
@@ -17,6 +19,7 @@ int zamboni_search_ticks = 0;
 int zamboni_default_speed = 5;
 int tos_switch_length = 1;
 int tos_capture_speed = 4;
+int tos_default_speed = 5;
 
 #define UNKNOWN 0
 #define TRACK_SECTION 1
@@ -43,8 +46,9 @@ int tos_capture_speed = 4;
 struct _track_piece;
 typedef struct _track_piece
 {
-	unsigned short id;
+	unsigned char id;
 	unsigned char type;
+	unsigned char default_direction;
 	unsigned char direction;
 	union
 	{
@@ -241,7 +245,7 @@ BOOL set_switch(track_piece *swt, unsigned char direction)
 	if ((direction != GREEN && direction != RED) || swt->type != TRACK_SWITCH)
 		return FALSE;
 
-	if (swt->direction != direction)
+	if (swt->direction != direction || TOS_track_status.setup != TRUE)
 	{
 		k_sprintf(msg.output_buffer, "M%d%c\r", swt->id, direction);
 
@@ -329,14 +333,15 @@ void add_track_section(unsigned short id, unsigned int length, unsigned char typ
 		trk->track2 = NULL;
 }
 
-void add_track_switch(unsigned short id, unsigned char type_out, unsigned int id_out, 
+void add_track_switch(unsigned char id, unsigned char default_dir, unsigned char type_out, unsigned int id_out, 
 	unsigned char type_G, unsigned int id_G, unsigned char type_R, unsigned int id_R)
 {
 	track_piece *trk = &TOS_track_switches[id];
 
-	trk->id 		= id;
-	trk->type 		= TRACK_SWITCH;
-	trk->direction 	= UNKNOWN;
+	trk->id 				= id;
+	trk->type 				= TRACK_SWITCH;
+	trk->default_direction 	= default_dir;
+	trk->direction 			= UNKNOWN;
 
 	if (type_out == TRACK_SECTION)
 		trk->track_out = &TOS_track_sections[id_out];
@@ -380,15 +385,15 @@ void init_TOS_track_graph()
 	add_track_section(14, 2, TRACK_SWITCH, 9, TRACK_SECTION, 13);
 	add_track_section(15, 1, TRACK_SWITCH, 9, TRACK_SWITCH, 1);
 	add_track_section(16, 6, TRACK_SWITCH, 9, UNKNOWN, 0);
-	add_track_switch(1, TRACK_SECTION, 15, TRACK_SECTION, 3, TRACK_SWITCH, 2);
-	add_track_switch(2, TRACK_SWITCH, 1, TRACK_SECTION, 1, TRACK_SECTION, 12);
-	add_track_switch(3, TRACK_SWITCH, 4, TRACK_SECTION, 2, TRACK_SECTION, 5);
-	add_track_switch(4, TRACK_SECTION, 6, TRACK_SECTION, 4, TRACK_SWITCH, 3);
-	add_track_switch(5, TRACK_SECTION, 7, TRACK_SECTION, 10, TRACK_SWITCH, 6);
-	add_track_switch(6, TRACK_SWITCH, 5, TRACK_SECTION, 9, TRACK_SECTION, 8);
-	add_track_switch(7, TRACK_SECTION, 12, TRACK_SECTION, 9, TRACK_SECTION, 11);
-	add_track_switch(8, TRACK_SECTION, 13, TRACK_SECTION, 10, TRACK_SECTION, 11);
-	add_track_switch(9, TRACK_SECTION, 14, TRACK_SECTION, 16, TRACK_SECTION, 15);
+	add_track_switch(1, GREEN, TRACK_SECTION, 15, TRACK_SECTION, 3, TRACK_SWITCH, 2);
+	add_track_switch(2, GREEN, TRACK_SWITCH, 1, TRACK_SECTION, 1, TRACK_SECTION, 12);
+	add_track_switch(3, GREEN, TRACK_SWITCH, 4, TRACK_SECTION, 2, TRACK_SECTION, 5);
+	add_track_switch(4, GREEN, TRACK_SECTION, 6, TRACK_SECTION, 4, TRACK_SWITCH, 3);
+	add_track_switch(5, GREEN, TRACK_SECTION, 7, TRACK_SECTION, 10, TRACK_SWITCH, 6);
+	add_track_switch(6, GREEN, TRACK_SWITCH, 5, TRACK_SECTION, 9, TRACK_SECTION, 8);
+	add_track_switch(7, RED, TRACK_SECTION, 12, TRACK_SECTION, 9, TRACK_SECTION, 11);
+	add_track_switch(8, GREEN, TRACK_SECTION, 13, TRACK_SECTION, 10, TRACK_SECTION, 11);
+	add_track_switch(9, RED, TRACK_SECTION, 14, TRACK_SECTION, 16, TRACK_SECTION, 15);
 }
 
 
@@ -802,64 +807,69 @@ int go_through_destination(train_train *trn)
 			reduce_path_one_section(&path);
 
 			// move train near destination
-			move_train_poll(trn, 5, &path);
+			move_train_poll(trn, tos_default_speed, &path);
 
 			// recalculate path
 			BFS_path(trn->position, trn->destination, &path);
-			set_path_switches(&path);
-
 			extend_path_one_section(&path);
+			set_path_switches(&path);
 
 			if (path.path[path.length-1] != trn->destination)
 			{
 				// extension successful
-				move_train_poll(trn, 4, &path);
+				move_train_poll(trn, tos_capture_speed, &path);
 			}
 			else
 			{
 				// deadend
-				move_train_time(trn, 4, &path);
+				move_train_time(trn, tos_capture_speed, &path);
 			}
 			break;
 		}
 
-		move_train_poll(trn, 5, &path);
+		move_train_poll(trn, tos_default_speed, &path);
 
 		BFS_path(trn->position, trn->destination, &path);
 		turn_around_path(&path);
 		set_path_switches(&path);
 	}
 
-	wprintf(train_wnd, "Got Cargo ");
+	wprintf(train_wnd, "Got Cargo\n");
 
 	return 0;
 }
 
-void reset_TOS_track()
+void reset_TOS_switches()
+{
+	set_switch(&TOS_track_switches[1], TOS_track_switches[1].default_direction);
+	set_switch(&TOS_track_switches[2], TOS_track_switches[2].default_direction);
+	set_switch(&TOS_track_switches[3], TOS_track_switches[3].default_direction);
+	set_switch(&TOS_track_switches[4], TOS_track_switches[4].default_direction);
+	set_switch(&TOS_track_switches[5], TOS_track_switches[5].default_direction);
+	set_switch(&TOS_track_switches[6], TOS_track_switches[6].default_direction);
+	set_switch(&TOS_track_switches[7], TOS_track_switches[7].default_direction);
+	set_switch(&TOS_track_switches[8], TOS_track_switches[8].default_direction);
+	set_switch(&TOS_track_switches[9], TOS_track_switches[9].default_direction);
+}
+
+void reset_TOS_track_status()
 {
 	if (TOS_track_status.setup == FALSE)
 	{
 		TOS_track_status.s88_clear = FALSE;
-		TOS_track_status.setup     = TRUE;
 		TOS_track_status.number_trains = 0;
 	}
 
-	set_switch(&TOS_track_switches[1], GREEN);
-	set_switch(&TOS_track_switches[2], GREEN);
-	set_switch(&TOS_track_switches[3], GREEN);
-	set_switch(&TOS_track_switches[4], GREEN);
-	set_switch(&TOS_track_switches[5], GREEN);
-	set_switch(&TOS_track_switches[6], GREEN);
-	set_switch(&TOS_track_switches[7], RED);
-	set_switch(&TOS_track_switches[8], GREEN);
-	set_switch(&TOS_track_switches[9], RED);
+	reset_TOS_switches();
+
+	TOS_track_status.setup = TRUE;
 }
 
 BOOL find_TOS_configuration()
 {
 	int i;
 
-	reset_TOS_track();
+	reset_TOS_track_status();
 
 	// find engine
 	TOS_track_status.trains[TOS_track_status.number_trains].id = RED_TRAIN;
@@ -953,6 +963,7 @@ void train_process(PROCESS self, PARAM param)
 	PROCESS sender;
 	command *cmd;
 
+
 	init_TOS_track_graph();
 
 	while(1)
@@ -960,6 +971,13 @@ void train_process(PROCESS self, PARAM param)
 		wprintf(train_wnd, "train> ");
 
 		msg = (Train_Message *)receive(&sender);
+
+		if (TOS_train_getting_cargo)
+		{
+			wprintf(train_wnd, "Train is getting cargo, ignoring commands\n");
+			reply(sender);
+			continue;
+		}
 
 		// input was cleaned in shell
 		for (i = 0; i < msg->argc; i++)
@@ -1125,7 +1143,7 @@ int goto_func(int argc, char **argv)
 	return 0;
 }
 
-int get_cargo_func(int argc, char **argv)
+void get_cargo_process(PROCESS self, PARAM param)
 {
 	train_train *red_train;
 	train_train *cargo_car;
@@ -1136,7 +1154,7 @@ int get_cargo_func(int argc, char **argv)
 	if (find_TOS_configuration() == FALSE)
 	{
 		wprintf(train_wnd, "Couldn't set up TOS track\n");
-		return 1;
+		exit();
 	}
 
 	red_train = &TOS_track_status.trains[0];
@@ -1151,6 +1169,18 @@ int get_cargo_func(int argc, char **argv)
 	go_to_destination(red_train);
 
 	wprintf(train_wnd, "Complete\n");
+
+	TOS_train_getting_cargo = FALSE;
+
+	exit();
+}
+
+int get_cargo_func(int argc, char **argv)
+{
+	TOS_train_getting_cargo = TRUE;
+
+	create_process (get_cargo_process, 4, 0, "Get Cargo process");
+
 	return 0;
 }
 
@@ -1181,6 +1211,8 @@ void init_train(WINDOW* wnd)
 	train_cmd[MAX_COMMANDS].description = "NULL";
 
 	TOS_track_status.setup = FALSE;
+
+	TOS_train_getting_cargo = FALSE;
 
 	train_port = create_process (train_process, 3, 0, "Train process");
 }

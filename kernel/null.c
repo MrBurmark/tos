@@ -9,6 +9,8 @@ volatile unsigned int null_prime;
 volatile BOOL prime_reset;
 volatile unsigned int new_start;
 
+volatile PROCESS process_to_kill;
+
 void null_process(PROCESS proc, PARAM param)
 {
 	// WORD *pos = (WORD*)WINDOW_BASE_ADDR + WINDOW_OFFSET(null_window, null_window->cursor_x, null_window->cursor_y) + 11;
@@ -20,6 +22,12 @@ void null_process(PROCESS proc, PARAM param)
 
 	while(1)
 	{
+		if (process_to_kill != NULL)
+		{
+			kill_process(process_to_kill, TRUE);
+			process_to_kill = NULL;
+		}
+
 		if (prime_reset == TRUE)
 		{
 			i = (new_start > 2) ? new_start + 1 - new_start%2 : 3;
@@ -54,5 +62,7 @@ void null_process(PROCESS proc, PARAM param)
 
 void init_null_process()
 {
+	process_to_kill = NULL;
+
 	create_process (null_process, 0, 456198994, "Null process");
 }

@@ -134,6 +134,7 @@ PORT create_process(void (*new_proc) (PROCESS, PARAM),
 PROCESS fork();
 #endif
 BOOL kill_process (PROCESS proc, BOOL force);
+void exit();
 void print_pcb(WINDOW* wnd, PROCESS p);
 void print_process(WINDOW* wnd, PROCESS p);
 void print_all_processes(WINDOW* wnd);
@@ -158,6 +159,8 @@ void init_dispatcher();
 extern volatile unsigned int null_prime;
 extern volatile BOOL prime_reset;
 extern volatile unsigned int new_start;
+
+extern volatile PROCESS process_to_kill;
 
 void init_null_process();
 
@@ -304,6 +307,20 @@ typedef struct _command
     int (*func) (int argc, char **argv);
     char *description;
 } command;
+
+typedef struct _input_buffer
+{
+    BOOL used;
+    int length;
+    char buffer[INPUT_BUFFER_MAX_LENGTH + 1];
+} input_buffer;
+
+typedef struct _arg_buffer
+{
+    int argc;
+    char *argv[INPUT_BUFFER_MAX_LENGTH];
+    input_buffer in_buf;
+} arg_buffer;
 
 void print_commands(WINDOW *wnd, const command *commands);
 command* find_command(const command *commands, const char *in_name);

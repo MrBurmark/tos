@@ -8,13 +8,6 @@ void win_printc(WINDOW *wnd, char c);
 
 command shell_cmd[MAX_COMMANDS + 1];
 
-typedef struct _input_buffer
-{
-	BOOL used;
-	int length;
-	char buffer[INPUT_BUFFER_MAX_LENGTH + 1];
-} input_buffer;
-
 input_buffer history[SHELL_HISTORY_SIZE];
 input_buffer *history_head; // always points to a new buffer
 input_buffer *history_current; // always points to the buffer displayed on screen
@@ -140,19 +133,20 @@ void init_command(char *name, int (*func) (int argc, char **argv), char *descrip
 
 // finds null char seperated args in in_buf
 // saves a pointer to each arg in argv
-// returns the number of args found
-int setup_args(const input_buffer *in_buf, char **argv)
+void setup_args(input_buffer* in_buf, arg_buffer *arg)
 {
 	int i, j;
 	int in_arg = FALSE;
-	for (i = j = 0; i < in_buf->length; i++)
+	arg->in_buf = *in_buf;
+
+	for (i = j = 0; i < arg->in_buf.length; i++)
 	{
-		if (in_buf->buffer[i] != '\0')
+		if (arg->in_buf.buffer[i] != '\0')
 		{
 			// reading through part of an argument, add to argv if this is the first char
 			if (in_arg == FALSE)
 			{
-				argv[j++] = (char *)&in_buf->buffer[i];
+				arg->argv[j++] = (char *)&arg->in_buf.buffer[i];
 				in_arg = TRUE;
 			}
 		}
@@ -162,12 +156,12 @@ int setup_args(const input_buffer *in_buf, char **argv)
 			in_arg = FALSE;
 		}
 	}
-	return j;
+	arg->argc = j;
 }
 
-void clear_args(char **argv)
+void clear_args(arg_buffer *arg)
 {
-	k_memset(argv, 0, INPUT_BUFFER_MAX_LENGTH*sizeof(char *));
+	k_memset(&arg->argv[0], 0, INPUT_BUFFER_MAX_LENGTH*sizeof(char *));
 }
 
 
@@ -240,7 +234,7 @@ void shell_process(PROCESS proc, PARAM param)
 {
 	int i;
 	command *cmd;
-	char *argv[INPUT_BUFFER_MAX_LENGTH];
+	arg_buffer arg;
 
 	wprintf(shell_wnd, "Welcome to the TOS shell\n");
 
@@ -267,12 +261,12 @@ void shell_process(PROCESS proc, PARAM param)
 		}
 		else
 		{
-			clear_args(argv);
+			clear_args(&arg);
 
-			i = setup_args(history_current, argv);
+			setup_args(history_current, &arg);
 
 			// run command
-			i = (cmd->func)(i, argv);
+			i = (cmd->func)(arg.argc, &arg.argv[0]);
 
 			// check for error code returned
 			if (i != 0)

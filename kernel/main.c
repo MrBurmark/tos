@@ -26,8 +26,7 @@ void kernel_main()
 
     // tos_splash_screen(1000);
 
-    remove_ready_queue(active_proc);
-    resign();
-
+    exit();
+    // exit should never return
     while (1);
 }

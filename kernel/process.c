@@ -135,6 +135,16 @@ BOOL kill_process (PROCESS proc, BOOL force)
 	}
 }
 
+// gives the null process the message to kill the other process
+void exit()
+{
+	process_to_kill = active_proc;
+
+	remove_ready_queue(active_proc);
+
+	resign();
+}
+
 PROCESS fork()
 {
     // Dummy return to make gcc happy

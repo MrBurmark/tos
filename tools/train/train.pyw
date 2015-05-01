@@ -39,7 +39,7 @@ odd_contact_color = 'brown'
 
 train = 20
 wagon = 1
-zamboni = 24
+zamboni = 78
 
 max_vehicle_speed = 5
 zamboni_speed = max_vehicle_speed 

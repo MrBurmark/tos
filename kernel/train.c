@@ -26,7 +26,7 @@ int tos_default_speed = 5;
 #define GREEN 'G'
 #define RED 'R'
 #define RED_TRAIN 20
-#define BLACK_TRAIN 10
+#define BLACK_TRAIN 78
 #define CARGO_CAR 5
 #define TOS_TRACK_NUMBER_SECTIONS 16
 #define TOS_TRACK_NUMBER_SWITCHES 9

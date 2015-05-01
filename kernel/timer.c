@@ -149,4 +149,6 @@ void init_timer ()
 	tml_head = NULL;
 
 	timer_port = create_process(timer_process, 6, 0, "Timer process");
+
+	resign();
 }

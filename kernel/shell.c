@@ -195,6 +195,11 @@ int get_input()
 		// get new character
 		send(keyb_port, (void *)&msg);
 
+		if (graphics_mode != TEXT_MODE)
+	    {
+	        continue;
+	    }
+
 		if (c == '\b' && history_current->length > 0)
 		{
 			// backspace received and can backspace
@@ -442,7 +447,26 @@ int kill_func(int argc, char **argv)
 	else
 	{
 		wprintf(shell_wnd, "Usage: kill proc_num [-f]\n");
+		return 2;
+	}
+}
+
+int tos_splash_func(int argc, char **argv)
+{
+	if (argc < 2)
+	{
+		wprintf(shell_wnd, "Usage: splash time\n");
 		return 1;
+	}
+	else if (is_num(argv[1]))
+	{
+		tos_splash_screen(atoi(argv[1]));
+		return 0;
+	}
+	else
+	{
+		wprintf(shell_wnd, "Usage: splash time\n");
+		return 2;
 	}
 }
 
@@ -462,6 +486,7 @@ void init_shell()
 	init_command("prime", prime_func, "Prints a prime computed by the null process", &shell_cmd[i++]);
 	init_command("train", train_func, "Train related commands, see train help", &shell_cmd[i++]);
 	init_command("kill", kill_func, "Kill a process", &shell_cmd[i++]);
+	init_command("splash", tos_splash_func, "Display TOS splash screen in VGA mode", &shell_cmd[i++]);
 
 	// init unused commands
 	while (i < MAX_COMMANDS)
@@ -481,6 +506,8 @@ void init_shell()
 	history_current = history;
 
 	create_process (shell_process, 3, 0, "Shell process");
+
+	resign();
 
 	init_train(train_wnd);
 }

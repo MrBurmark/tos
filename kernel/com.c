@@ -117,4 +117,6 @@ void init_com ()
     init_uart();
 
     com_port = create_process(com_process, 6, 0, "COM process");
+
+    resign();
 }

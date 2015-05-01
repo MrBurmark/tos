@@ -356,12 +356,15 @@ void init_pacman(WINDOW* wnd, int num_ghosts);
 
 #define TEXT_MODE 0x00
 #define VGA_MODE 0x13
+#define GRAPHICS_MEM_PLANE_SIZE 0x8000
 #define GRAPHICS_WINDOW_TOTAL_WIDTH 320
 #define GRAPHICS_WINDOW_TOTAL_HEIGHT 200
 #define GRAPHICS_WINDOW_BASE_ADDR 0xA0000
 
 extern int graphics_mode;
 
+void save_colors(unsigned char palette[256][3]);
+void set_colors(unsigned char palette[256][3], int shift);
 void init_graphics();
 int start_graphic_vga();
 int start_text_mode();

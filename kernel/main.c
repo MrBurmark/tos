@@ -19,12 +19,13 @@ void kernel_main()
     init_interrupts();
     init_null_process();
     init_timer();
+
+    // tos_splash_screen(1000);
+
     init_com();
     init_keyb();
     init_shell();
     // init_pacman(pacman_wnd, 2);
-
-    // tos_splash_screen(1000);
 
     exit();
     // exit should never return

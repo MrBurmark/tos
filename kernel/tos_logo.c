@@ -5,22 +5,8 @@
 #define TOS_LOGO_GRAPHICS_WINDOW_OFFSET ( (GRAPHICS_WINDOW_TOTAL_HEIGHT / 2 - tos_logo_height / 2) * GRAPHICS_WINDOW_TOTAL_WIDTH \
         + (GRAPHICS_WINDOW_TOTAL_WIDTH / 2 - tos_logo_width / 2))
 
-void set_tos_colors(void)
-{
-    int i;
-    // init PEL Address Write Mode Register to 0 to write all colors
-    outportb(0x3C8, 0);
 
-    for(i = 0; i < 256; i++)
-    {
-        // output colors to PEL Data Register
-        // note VGA supports 18 bit not 24 bit color
-        outportb(0x3C9, header_data_cmap[i][0] >> 2);
-        outportb(0x3C9, header_data_cmap[i][1] >> 2);
-        outportb(0x3C9, header_data_cmap[i][2] >> 2);
-    }
-}
-
+unsigned char default_palette[256][3];
 
 void draw_tos_logo(unsigned char *data)
 {
@@ -43,7 +29,9 @@ void tos_splash_screen(int time)
 
     assert( start_graphic_vga() );
 
-    set_tos_colors();
+    save_colors(default_palette);
+
+    set_colors(header_data_cmap, 2);
 
     // clear screen
     k_memset((unsigned char *)GRAPHICS_WINDOW_BASE_ADDR, 0x00, GRAPHICS_WINDOW_TOTAL_WIDTH * GRAPHICS_WINDOW_TOTAL_HEIGHT);
@@ -59,6 +47,8 @@ void tos_splash_screen(int time)
 
         time -= 2 * LOGO_ANIMATION_SLIDE_TIME;
     }
+
+    set_colors(default_palette, 0);
 
     assert( start_text_mode() );
 }

@@ -1151,6 +1151,48 @@ int time_multiplier_func(int argc, char **argv)
 	return 0;
 }
 
+int stop_func(int argc, char **argv)
+{
+	set_speed(red_train, 0);
+
+	return 0;
+}
+
+int go_func(int argc, char **argv)
+{
+	int speed = tos_default_speed;
+
+	if (argc > 1)
+	{
+		if (is_num(argv[1]))
+		{
+			speed = atoi(argv[1]);
+		}
+		else
+		{
+			wprintf(train_wnd, "Usage: go [speed]\n");
+			return 1;
+		}
+	}
+
+	set_speed(red_train, speed);
+
+	return 0;
+}
+
+int reverse_func(int argc, char **argv)
+{
+	int speed = red_train->speed;
+
+	if (speed != 0) set_speed(red_train, 0);
+
+	change_direction(red_train);
+
+	if (speed != 0) set_speed(red_train, speed);
+
+	return 0;
+}
+
 int goto_func(int argc, char **argv)
 {
 	int dst_id;
@@ -1261,6 +1303,9 @@ void init_train(WINDOW* wnd)
 	init_command("cmd", run_command_func, "Runs a train command", &train_cmd[i++]);
 	init_command("pause", pause_func, "Prints the current pause or sets it when an argument is given", &train_cmd[i++]);
 	init_command("t_mult", time_multiplier_func, "Prints the current time multiplier or sets it when an argument is given", &train_cmd[i++]);
+	init_command("stop", stop_func, "stop the red train", &train_cmd[i++]);
+	init_command("go", go_func, "start the red train", &train_cmd[i++]);
+	init_command("reverse", reverse_func, "reverse the direction of the red train", &train_cmd[i++]);
 	init_command("goto", goto_func, "send the red train to the destination", &train_cmd[i++]);
 	init_command("gc", get_cargo_func, "red train links with the cargo car and returns to its starting location", &train_cmd[i++]);
 

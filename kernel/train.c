@@ -46,7 +46,8 @@ struct _track_piece;
 typedef struct _track_piece
 {
 	unsigned char id;
-	unsigned char type;
+	unsigned char type 		: 7;
+	unsigned char danger 	: 1; // if dangerous, zamboni runs through this segment
 	unsigned char default_direction;
 	unsigned char direction;
 	union
@@ -319,6 +320,7 @@ void add_track_section(unsigned short id, unsigned int length, unsigned char typ
 
 	trk->id 		= id;
 	trk->type 		= TRACK_SECTION;
+	trk->danger 	= FALSE;
 	trk->length 	= length;
 
 	if (type1 == TRACK_SECTION)
@@ -343,6 +345,7 @@ void add_track_switch(unsigned char id, unsigned char default_dir, unsigned char
 
 	trk->id 				= id;
 	trk->type 				= TRACK_SWITCH;
+	trk->danger 			= FALSE;
 	trk->default_direction 	= default_dir;
 	trk->direction 			= UNKNOWN;
 
@@ -414,13 +417,21 @@ void reset_TOS_switches()
 
 void reset_TOS_track_status()
 {
-	if (TOS_track_status.setup == FALSE)
-	{
-		TOS_track_status.s88_clear = FALSE;
-	}
+	int id;
 
+	// reset s88 status
+	TOS_track_status.s88_clear = FALSE;
+
+	// set track as unconfigured
 	TOS_track_status.configured = FALSE;
 
+	// reset danger flag
+	for (id = 1; id <= TOS_TRACK_NUMBER_SECTIONS; id++)
+		TOS_track_sections[id].danger = FALSE;
+	for (id = 1; id <= TOS_TRACK_NUMBER_SWITCHES; id++)
+		TOS_track_switches[id].danger = FALSE;
+
+	// reset switches
 	reset_TOS_switches();
 
 	TOS_track_status.setup = TRUE;
@@ -504,7 +515,7 @@ BOOL find_TOS_configuration()
 	}
 	if (black_train->position != NULL)
 	{
-		// wait long enough for 3 trips to segment 10
+		// wait long enough for 3 trips to segment 10 or 6
 		wait_time = TOS_track_length_time_multiplier * 4 * 3 / (zamboni_default_speed * zamboni_default_speed);
 		i = get_TOS_time();
 		while (get_TOS_time() - i < wait_time)
@@ -516,12 +527,18 @@ BOOL find_TOS_configuration()
 				black_train->prev = &TOS_track_sections[6];
 				break;
 			}
+			if (check_segment(&TOS_track_status, 6) == TRUE)
+			{
+				// zamboni going anti-clockwise
+				black_train->next = &TOS_track_sections[6];
+				black_train->prev = &TOS_track_switches[5];
+				break;
+			}
 		}
 		if (black_train->next == NULL)
 		{
-			// zamboni going anti-clockwise
-			black_train->next = &TOS_track_sections[6];
-			black_train->prev = &TOS_track_switches[5];
+			// should never happen
+			return FALSE;
 		}
 	}
 
@@ -545,11 +562,11 @@ typedef struct _BFS_node
 	unsigned char depth : 7;
 } BFS_node;
 
-#define GET_NODE_I(tp) ((tp->type == TRACK_SECTION) ? &nodes[tp->id - 1] : &nodes[tp->id - 1 + TOS_TRACK_NUMBER_SECTIONS])
+#define GET_BFS_NODE(tp) ((tp->type == TRACK_SECTION) ? &nodes[tp->id - 1] : &nodes[tp->id - 1 + TOS_TRACK_NUMBER_SECTIONS])
 #define BFS_NODE_ENQUEUE(tp) \
 		if(tp != NULL) \
 		{ \
-			node = GET_NODE_I(tp); \
+			node = GET_BFS_NODE(tp); \
 			if (node->used != TRUE) \
 			{ \
 				queue[queue_end++] = tp; \
@@ -562,7 +579,7 @@ typedef struct _BFS_node
 #define BFS_NODE_OUTPUT(tp) \
 		if(tp != NULL) \
 		{ \
-			node = GET_NODE_I(tp); \
+			node = GET_BFS_NODE(tp); \
 			if (node->used == TRUE && \
 				node->depth == i - 1) \
 			{ \
@@ -595,14 +612,14 @@ void BFS_path(const track_piece *src, const track_piece *dst, track_path *path)
 
 	queue[queue_end++] = (track_piece *)src;
 
-	node = GET_NODE_I(queue[queue_start]);
+	node = GET_BFS_NODE(queue[queue_start]);
 	node->used = TRUE;
 	node->depth = depth;
 
 	while(queue_start < queue_end)
 	{
 		trk_pc = queue[queue_start];
-		node = GET_NODE_I(trk_pc);
+		node = GET_BFS_NODE(trk_pc);
 
 		depth = node->depth + 1;
 
@@ -637,7 +654,7 @@ void BFS_path(const track_piece *src, const track_piece *dst, track_path *path)
 
 	// path found, copy it to path
 	queue_end--;
-	node = GET_NODE_I(queue[queue_end]);
+	node = GET_BFS_NODE(queue[queue_end]);
 	depth = node->depth;
 	trk_pc = queue[queue_end];
 
@@ -667,6 +684,341 @@ void BFS_path(const track_piece *src, const track_piece *dst, track_path *path)
 	path->path[0] = (track_piece *)src;
 
 	path->length = depth + 1;
+}
+
+
+typedef struct _DJIKSTRA_node
+{
+	unsigned short heap_pos;
+	unsigned short distance : 15;
+	unsigned short in_heap 	: 1;
+} DJIKSTRA_node;
+
+// heap_end is always the index where the next item may be placed
+typedef struct _DJIKSTRA_heap
+{
+	unsigned short heap_end;
+	track_piece *heap[TOS_TRACK_NUMBER_SWITCHES + TOS_TRACK_NUMBER_SECTIONS + 1];
+	DJIKSTRA_node nodes[TOS_TRACK_NUMBER_SWITCHES + TOS_TRACK_NUMBER_SECTIONS + 1];
+} DJIKSTRA_heap;
+
+#define GET_DJIKSTRA_NODE(tp, Dh) (((tp)->type == TRACK_SECTION) ? &(Dh)->nodes[(tp)->id - 1] : &(Dh)->nodes[(tp)->id - 1 + TOS_TRACK_NUMBER_SECTIONS])
+
+
+// moves the item up in the heap as far as possible to maintain heap structure
+void DJIKSTRA_heap_fix_up(DJIKSTRA_node *node, DJIKSTRA_heap *D_heap)
+{
+	track_piece *moving_pc = D_heap->heap[node->heap_pos];
+	unsigned short next_pos = node->heap_pos / 2;
+	DJIKSTRA_node *next_node;
+
+	// move up as much as possible
+	while (1)
+	{
+		next_node = GET_DJIKSTRA_NODE(D_heap->heap[next_pos], D_heap);
+
+		if (next_node->distance > node->distance)
+		{
+			// move up, swap nodes
+			D_heap->heap[node->heap_pos] = D_heap->heap[next_pos];
+			D_heap->heap[next_pos] = moving_pc;
+
+			next_node->heap_pos = node->heap_pos;
+			node->heap_pos = next_pos;
+
+			if (next_pos <= 1)
+				break;
+
+			next_pos /= 2;
+		}
+		else
+		{
+			// stop
+			break;
+		}
+	}
+}
+
+// moves the item down in the heap as far as possible to maintain heap structure
+void DJIKSTRA_heap_fix_down(DJIKSTRA_node *node, DJIKSTRA_heap *D_heap)
+{
+	track_piece *moving_pc = D_heap->heap[node->heap_pos];
+	unsigned short next_pos = node->heap_pos * 2;
+	DJIKSTRA_node *tmp_node_left, *tmp_node_right;
+	DJIKSTRA_node *next_node;
+
+	// move down as much as possible
+	while (next_pos < D_heap->heap_end)
+	{
+		// next node should be the smaller of the next possible nodes
+		tmp_node_left = GET_DJIKSTRA_NODE(D_heap->heap[next_pos], D_heap);
+
+		if (next_pos + 1 < D_heap->heap_end)
+		{
+			// right node exists
+			tmp_node_right = GET_DJIKSTRA_NODE(D_heap->heap[next_pos + 1], D_heap);
+
+			if (tmp_node_left->distance <= tmp_node_right->distance)
+			{
+				next_node = tmp_node_left;
+			}
+			else
+			{
+				next_node = tmp_node_right;
+				next_pos++;
+			}
+		}
+		else
+		{
+			// right node doesn't exist
+			next_node = tmp_node_left;
+		}
+			
+		if (next_node->distance < node->distance)
+		{
+			// move down, swap nodes
+			D_heap->heap[node->heap_pos] = D_heap->heap[next_pos];
+			D_heap->heap[next_pos] = moving_pc;
+
+			next_node->heap_pos = node->heap_pos;
+			node->heap_pos = next_pos;
+
+			next_pos *= 2;
+		}
+		else
+		{
+			// stop
+			break;
+		}
+	}
+}
+
+// heap is initialized with all track pieces at max distance
+void init_DJIKSTRA_heap(DJIKSTRA_heap *D_heap)
+{
+	int i;
+	D_heap->heap_end = 1;
+	k_memset(&D_heap->nodes[0], 0xff, (TOS_TRACK_NUMBER_SWITCHES + TOS_TRACK_NUMBER_SECTIONS) * sizeof(DJIKSTRA_node));
+
+	// add all track pieces
+	for (i = 1; i <= TOS_TRACK_NUMBER_SECTIONS; i++)
+	{
+		GET_DJIKSTRA_NODE(&TOS_track_sections[i], D_heap)->heap_pos = D_heap->heap_end;
+		D_heap->heap[D_heap->heap_end++] = &TOS_track_sections[i];
+	}
+	for (i = 1; i <= TOS_TRACK_NUMBER_SWITCHES; i++)
+	{
+		GET_DJIKSTRA_NODE(&TOS_track_switches[i], D_heap)->heap_pos = D_heap->heap_end;
+		D_heap->heap[D_heap->heap_end++] = &TOS_track_switches[i];
+	}
+}
+
+// returns the distance of the min item, and a pointer to the min item in *min_trk_pc
+// if empty returns max distance, and NULL
+unsigned short DJIKSTRA_heap_remove_min(track_piece **min_trk_pc, DJIKSTRA_heap *D_heap)
+{
+	DJIKSTRA_node *min_node;
+	DJIKSTRA_node *moved_node;
+
+	// check if heap empty
+	if(D_heap->heap_end < 1)
+	{
+		*min_trk_pc = NULL;
+		return 0xffff;
+	}
+
+	// get min node
+	*min_trk_pc = D_heap->heap[1];
+	min_node = GET_DJIKSTRA_NODE(*min_trk_pc, D_heap);
+	min_node->in_heap = FALSE;
+
+	// move last item to head
+	D_heap->heap[1] = D_heap->heap[--D_heap->heap_end];
+	moved_node = GET_DJIKSTRA_NODE(D_heap->heap[1], D_heap);
+	moved_node->heap_pos = 1;
+
+	// fix heap structure
+	if (D_heap->heap_end > 1)
+		DJIKSTRA_heap_fix_down(moved_node, D_heap);
+
+	return min_node->distance;
+}
+
+// returns the distance of an item trk_pc
+unsigned short DJIKSTRA_heap_get_distance(track_piece *trk_pc, DJIKSTRA_heap *D_heap)
+{
+	DJIKSTRA_node *node = GET_DJIKSTRA_NODE(trk_pc, D_heap);
+
+	return node->distance;
+}
+
+// reduces the distance of an item in the heap
+void DJIKSTRA_heap_reduce_distance(track_piece *trk_pc, unsigned short distance, DJIKSTRA_heap *D_heap)
+{
+	DJIKSTRA_node *node = GET_DJIKSTRA_NODE(trk_pc, D_heap);
+
+	assert(node->in_heap == TRUE && node->distance >= distance);
+
+	node->distance = distance;
+	
+	DJIKSTRA_heap_fix_up(node, D_heap);
+}
+
+// adds an item to the heap
+void DJIKSTRA_heap_add(track_piece *trk_pc, unsigned short distance, DJIKSTRA_heap *D_heap)
+{
+	DJIKSTRA_node *node = GET_DJIKSTRA_NODE(trk_pc, D_heap);
+
+	assert(node->in_heap == FALSE);
+
+	node->distance = distance;
+	node->heap_pos = D_heap->heap_end;
+	node->in_heap = TRUE;
+
+	D_heap->heap[D_heap->heap_end++] = trk_pc;
+	
+	DJIKSTRA_heap_fix_up(node, D_heap);
+}
+
+
+#define DJIKSTRA_NODE_REDUCE(tp) \
+		if ((tp) != NULL) \
+		{ \
+			if ((tp)->type == TRACK_SECTION) \
+			{ \
+				if (distance + (tp)->length < DJIKSTRA_heap_get_distance((tp), &D_heap)) \
+				{ \
+					DJIKSTRA_heap_reduce_distance((tp), distance + (tp)->length, &D_heap); \
+				} \
+			} \
+			else if ((tp)->type == TRACK_SWITCH) \
+			{ \
+				if (distance + tos_switch_length < DJIKSTRA_heap_get_distance((tp), &D_heap)) \
+				{ \
+					DJIKSTRA_heap_reduce_distance((tp), distance + tos_switch_length, &D_heap); \
+				} \
+			} \
+		}
+
+#define DJIKSTRA_FIND_NEXT(tp) \
+		if ((tp) != NULL) \
+		{ \
+			if ((tp)->type == TRACK_SECTION) \
+			{ \
+				if (distance == DJIKSTRA_heap_get_distance((tp), &D_heap)) \
+				{ \
+					trk_pc = (tp); \
+					continue; \
+				} \
+			} \
+			else if ((tp)->type == TRACK_SWITCH) \
+			{ \
+				if (distance == DJIKSTRA_heap_get_distance((tp), &D_heap)) \
+				{ \
+					trk_pc = (tp); \
+					continue; \
+				} \
+			} \
+		}
+
+
+// takes track section src and dst and computes a path from src to dst using Djikstra's algorithm
+// returns the number of track pieces in the path, writes the path to path, src included, dst included if dst != src
+void DJIKSTRA_path(const track_piece *src, const track_piece *dst, track_path *path)
+{
+	unsigned short distance;
+	int i;
+	track_piece *trk_pc;
+	track_piece *min_trk_pc;
+	DJIKSTRA_heap D_heap;
+
+	if (src == dst)
+	{
+		path->length = 1;
+		path->path[0] = (track_piece *)src;
+		return;
+	}
+
+	// init heap with all track pieces
+	init_DJIKSTRA_heap(&D_heap);
+
+	// set-up src distance
+	DJIKSTRA_heap_reduce_distance((track_piece *)src, 0, &D_heap);
+
+	// remove first track piece
+	distance = DJIKSTRA_heap_remove_min(&min_trk_pc, &D_heap);
+
+	while(min_trk_pc != dst && min_trk_pc != NULL)
+	{
+		if (min_trk_pc->type == TRACK_SECTION)
+		{
+			DJIKSTRA_NODE_REDUCE(min_trk_pc->track1);
+			DJIKSTRA_NODE_REDUCE(min_trk_pc->track2);
+		}
+		else if (min_trk_pc->type == TRACK_SWITCH)
+		{
+			DJIKSTRA_NODE_REDUCE(min_trk_pc->track_out);
+			DJIKSTRA_NODE_REDUCE(min_trk_pc->track_green);
+			DJIKSTRA_NODE_REDUCE(min_trk_pc->track_red);
+		}
+		else
+		{
+			// should never happen
+			path->length = -1;
+			return;
+		}
+
+		// remove next track piece
+		distance = DJIKSTRA_heap_remove_min(&min_trk_pc, &D_heap);
+	}
+
+	// no path found
+	if (min_trk_pc == NULL)
+	{
+		// should never happen
+		path->length = -1;
+		return;
+	}
+
+	// path found, copy it to path
+	trk_pc = (track_piece *)dst;
+	distance = DJIKSTRA_heap_get_distance(trk_pc, &D_heap);
+
+	i = 0;
+	while (trk_pc != src)
+	{
+		path->path[i++] = trk_pc;
+		if (trk_pc->type == TRACK_SECTION)
+			distance -= trk_pc->length;
+		else if (trk_pc->type == TRACK_SWITCH)
+			distance -= tos_switch_length;
+
+		if (trk_pc->type == TRACK_SECTION)
+		{
+			DJIKSTRA_FIND_NEXT(trk_pc->track1);
+			DJIKSTRA_FIND_NEXT(trk_pc->track2);
+		}
+		else if (trk_pc->type == TRACK_SWITCH)
+		{
+			DJIKSTRA_FIND_NEXT(trk_pc->track_out);
+			DJIKSTRA_FIND_NEXT(trk_pc->track_green);
+			DJIKSTRA_FIND_NEXT(trk_pc->track_red);
+		}
+		// should never happen
+		path->length = -1;
+		return;
+	}
+
+	path->path[i++] = (track_piece *)src;
+	path->length = i;
+
+	// fix path direction (reversed)
+	for (i = 0; i < path->length / 2; i++)
+	{
+		trk_pc = path->path[i];
+		path->path[i] = path->path[path->length - i - 1];
+		path->path[path->length - i - 1] = trk_pc;
+	}
 }
 
 void print_path(track_path *path)
@@ -821,6 +1173,34 @@ void wait_till_occupied(track_piece* trk)
 }
 
 // move train to last, poll last until train appears
+BOOL move_train_past(train_train *trn, int speed, track_path *path)
+{
+	if (path->length < 2)
+		return TRUE;
+
+	if (trn->prev == path->path[1])
+	{
+		change_direction(trn);
+	}
+
+	// move train
+	if (!set_speed(trn, speed))
+		return FALSE;
+
+	// wait until trn gets to track segment
+	wait_till_occupied(path->path[path->length - 1]);
+
+	wait_till_clear(path->path[path->length - 1]);
+
+	// stop at requested segment
+	set_speed(trn, 0);
+
+	update_position(trn, path);
+
+	return TRUE;
+}
+
+// move train to last, poll last until train appears
 BOOL move_train_poll(train_train *trn, int speed, track_path *path)
 {
 	if (path->length < 2)
@@ -880,7 +1260,7 @@ int go_to_destination_time(train_train *trn)
 {
 	track_path path;
 
-	BFS_path(trn->position, trn->destination, &path);
+	DJIKSTRA_path(trn->position, trn->destination, &path);
 
 	turn_around_path(&path);
 
@@ -895,7 +1275,7 @@ int go_to_destination_time(train_train *trn)
 	{
 		move_train_time(trn, 5, &path);
 
-		BFS_path(trn->position, trn->destination, &path);
+		DJIKSTRA_path(trn->position, trn->destination, &path);
 
 		turn_around_path(&path);
 
@@ -911,7 +1291,7 @@ int go_to_destination(train_train *trn)
 {
 	track_path path;
 
-	BFS_path(trn->position, trn->destination, &path);
+	DJIKSTRA_path(trn->position, trn->destination, &path);
 
 	turn_around_path(&path);
 
@@ -928,7 +1308,7 @@ int go_to_destination(train_train *trn)
 
 		reset_TOS_switches();
 
-		BFS_path(trn->position, trn->destination, &path);
+		DJIKSTRA_path(trn->position, trn->destination, &path);
 
 		turn_around_path(&path);
 
@@ -945,7 +1325,7 @@ int go_through_destination(train_train *trn)
 {
 	track_path path;
 
-	BFS_path(trn->position, trn->destination, &path);
+	DJIKSTRA_path(trn->position, trn->destination, &path);
 	turn_around_path(&path);
 	set_path_switches(&path);
 
@@ -960,28 +1340,7 @@ int go_through_destination(train_train *trn)
 		if (path.path[path.length-1] == trn->destination)
 		{
 			// if path ends at destination
-			reduce_path_one_section(&path);
-
-			// move train near destination
-			move_train_poll(trn, tos_default_speed, &path);
-
-			reset_TOS_switches();
-
-			// recalculate path
-			BFS_path(trn->position, trn->destination, &path);
-			extend_path_one_section(&path);
-			set_path_switches(&path);
-
-			if (path.path[path.length-1] != trn->destination)
-			{
-				// extension successful
-				move_train_poll(trn, tos_capture_speed, &path);
-			}
-			else
-			{
-				// deadend
-				move_train_time(trn, tos_capture_speed, &path);
-			}
+			move_train_past(trn, tos_default_speed, &path);
 
 			reset_TOS_switches();
 
@@ -992,7 +1351,7 @@ int go_through_destination(train_train *trn)
 
 		reset_TOS_switches();
 
-		BFS_path(trn->position, trn->destination, &path);
+		DJIKSTRA_path(trn->position, trn->destination, &path);
 		turn_around_path(&path);
 		set_path_switches(&path);
 	}
@@ -1193,10 +1552,36 @@ int reverse_func(int argc, char **argv)
 	return 0;
 }
 
+int check_func(int argc, char **argv)
+{
+	if (argc > 1)
+	{
+		if (is_num(argv[1]))
+		{
+			if (check_segment(&TOS_track_status, atoi(argv[1])))
+			{
+				wprintf(train_wnd, "Found: on segment %d\n", atoi(argv[1]));
+			}
+			else
+			{
+				wprintf(train_wnd, "NOT Found: on segment %d\n", atoi(argv[1]));
+			}
+		}
+		else
+		{
+			wprintf(train_wnd, "Usage: check segment_id\n");
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 int goto_func(int argc, char **argv)
 {
 	int dst_id;
 	unsigned char use_time = FALSE;
+	int tmp = TOS_track_length_time_multiplier;
 
 	if (argc < 2)
 	{
@@ -1212,11 +1597,15 @@ int goto_func(int argc, char **argv)
 		return 2;
 	}
 
+	TOS_track_length_time_multiplier = 0;
+
 	if (configure_TOS_track() == FALSE)
 	{
 		wprintf(train_wnd, "Couldn't set up TOS track\n");
 		return 3;
 	}
+
+	TOS_track_length_time_multiplier = tmp;
 
 	if (argc > 2)
 	{
@@ -1306,6 +1695,7 @@ void init_train(WINDOW* wnd)
 	init_command("stop", stop_func, "stop the red train", &train_cmd[i++]);
 	init_command("go", go_func, "start the red train", &train_cmd[i++]);
 	init_command("reverse", reverse_func, "reverse the direction of the red train", &train_cmd[i++]);
+	init_command("check", check_func, "check a segment for a train", &train_cmd[i++]);
 	init_command("goto", goto_func, "send the red train to the destination", &train_cmd[i++]);
 	init_command("gc", get_cargo_func, "red train links with the cargo car and returns to its starting location", &train_cmd[i++]);
 

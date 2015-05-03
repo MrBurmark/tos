@@ -1512,6 +1512,7 @@ int move_train_one_segment_time(train_train *trn, int speed, track_path *path, i
 // move train from start to stop, poll last until train appears
 BOOL move_train_poll(train_train *trn, int speed, track_path *path, int start, int stop)
 {
+	wprintf(train_wnd, "Sub-path: ");
 	print_path(path, start, stop);
 
 	if (stop >= path->length || stop <= start || start < 0)
@@ -1544,6 +1545,7 @@ BOOL move_train_poll(train_train *trn, int speed, track_path *path, int start, i
 // move train to last, time train
 BOOL move_train_time(train_train *trn, int speed, track_path *path, int start, int stop)
 {
+	wprintf(train_wnd, "Sub-path: ");
 	print_path(path, start, stop);
 
 	if (stop >= path->length || stop <= start || start < 0)
@@ -1971,7 +1973,10 @@ void train_process(PROCESS self, PARAM param)
 
 	while(1)
 	{
-		wprintf(train_wnd, "train> ");
+		if (!TOS_train_getting_cargo)
+		{
+			wprintf(train_wnd, "train> ");
+		}
 
 		msg = (Train_Message *)receive(&sender);
 
@@ -2309,6 +2314,8 @@ void get_cargo_process(PROCESS self, PARAM param)
 
 	TOS_train_getting_cargo = FALSE;
 
+	wprintf(train_wnd, "train> ");
+
 	exit();
 }
 
@@ -2385,6 +2392,4 @@ void init_train(WINDOW* wnd)
 	black_train->prev = NULL;
 
 	train_port = create_process (train_process, 3, 0, "Train process");
-
-	resign();
 }

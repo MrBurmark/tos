@@ -18,6 +18,28 @@ void* k_memcpy(void* dst, const void* src, int len)
 	return dst;
 }
 
+void* k_memmove(void* dst, const void* src, int len)
+{
+	char* d;
+	const char* s;
+	const char* end;
+	if ((unsigned int)src < (unsigned int)dst)
+	{
+		d = ((char*)dst) + len - 1;
+		s = ((const char*)src) + len - 1;
+		end = (const char*)dst;
+		while(d >= end) *d-- = *s--;
+	}
+	else
+	{
+		d = (char*)dst;
+		s = (char*)src;
+		end = d + len;
+		while(d < end) *d++ = *s++;
+	}
+	return dst;
+}
+
 int k_memcmp(const void* b1, const void* b2, int len)
 {
 	int i;

@@ -19,6 +19,7 @@ int zamboni_default_speed = 5;
 int tos_switch_length = 1;
 int tos_capture_speed = 4;
 int tos_default_speed = 5;
+int danger_min_wait_till_clear_segment_length = 2;
 
 #define UNKNOWN 0
 #define TRACK_SECTION 1
@@ -949,6 +950,12 @@ void init_DJIKSTRA_heap(DJIKSTRA_heap *D_heap)
 		GET_DJIKSTRA_NODE(&TOS_track_switches[i], D_heap)->heap_pos = D_heap->heap_end;
 		D_heap->heap[D_heap->heap_end++] = &TOS_track_switches[i];
 	}
+
+	// for (i = 0; i < TOS_TRACK_NUMBER_SECTIONS + TOS_TRACK_NUMBER_SWITCHES; i++)
+	// {
+	// 	wprintf(train_wnd, "%d(%u)<%d> ", D_heap->nodes[i].heap_pos, D_heap->nodes[i].distance, D_heap->nodes[i].in_heap);
+	// }
+	// wprintf(train_wnd, "\n");
 }
 
 // returns the distance of the min item, and a pointer to the min item in *min_trk_pc
@@ -1580,7 +1587,7 @@ BOOL move_train_time(train_train *trn, int speed, track_path *path, int start, i
 // moves a train to its destination
 int go_to_destination_time(train_train *trn)
 {
-	int prev_i, curr_i, next_i;
+	int prev_i, curr_i, next_i, next_next_i;
 	track_path path;
 	BOOL danger = FALSE;
 
@@ -1597,50 +1604,64 @@ int go_to_destination_time(train_train *trn)
 	// set switches, if no danger all set
 	set_path_section_nondanger_switches(&path, 0, path.length - 1);
 
+	prev_i = -1;
+	curr_i = 0;
+
 	if (danger == TRUE)
 	{
-		prev_i = -1;
-		curr_i = 0;
+		// don't wait to enter danger if already in danger
+		if (path.path[curr_i]->danger == FALSE)
+		{
+			next_i = path_next_section_index(&path, curr_i);
+
+			// move next to danger
+			while(path.path[next_i]->danger == FALSE)
+			{
+				prev_i = curr_i;
+				curr_i = move_train_one_segment_time(trn, tos_default_speed, &path, curr_i);
+				next_i = path_next_section_index(&path, curr_i);
+			}
+
+			// stop train
+			set_speed(trn, 0);
+
+			wprintf(train_wnd, "Waiting for Zamboni to clear segment %d\n", path.path[next_i]->id);
+
+			// wait for danger to pass
+			wait_till_occupied(path.path[next_i]);
+			wait_till_clear(path.path[next_i]);
+
+			// follow behind danger
+			set_path_section_switches(&path, curr_i, next_i);
+
+			prev_i = curr_i;
+			curr_i = move_train_one_segment_time(trn, tos_default_speed, &path, curr_i);
+
+			set_speed(trn, 0);
+
+			reset_path_section_danger_switches(&path, prev_i, curr_i);
+		}
+
 		next_i = path_next_section_index(&path, curr_i);
-		// move next to danger
-		while(path.path[next_i]->danger == FALSE)
+		next_next_i = path_next_section_index(&path, next_i);
+
+		// follow behind danger
+		while(path.path[next_next_i]->danger == TRUE)
 		{
 			prev_i = curr_i;
 			curr_i = move_train_one_segment_time(trn, tos_default_speed, &path, curr_i);
 			next_i = path_next_section_index(&path, curr_i);
+			next_next_i = path_next_section_index(&path, next_i);
 		}
 
-		// stop train
-		set_speed(trn, 0);
-
-		// wait for danger to pass
-		wait_till_occupied(path.path[next_i]);
-		wait_till_clear(path.path[next_i]);
-
-		// follow behind danger
-		set_path_section_switches(&path, curr_i, next_i);
+		// don't overshoot turnoff
+		set_path_section_switches(&path, next_i, next_next_i);
 
 		prev_i = curr_i;
 		curr_i = move_train_one_segment_time(trn, tos_default_speed, &path, curr_i);
 		next_i = path_next_section_index(&path, curr_i);
 
-		set_speed(trn, 0);
-
-		reset_path_section_danger_switches(&path, prev_i, curr_i);
-
-		while(path.path[next_i]->danger == TRUE)
-		{
-			prev_i = curr_i;
-			curr_i = move_train_one_segment_time(trn, tos_default_speed, &path, curr_i);
-			next_i = path_next_section_index(&path, curr_i);
-		}
-
-		// stop train
-		set_speed(trn, 0);
-
 		// exit danger
-		set_path_section_switches(&path, curr_i, next_i);
-		
 		prev_i = curr_i;
 		curr_i = move_train_one_segment_time(trn, tos_default_speed, &path, curr_i);
 
@@ -1699,31 +1720,38 @@ int go_to_destination(train_train *trn)
 
 	if (danger == TRUE)
 	{
-		next_i = path_next_section_index(&path, curr_i);
-
-		// move next to danger
-		while(path.path[next_i]->danger == FALSE)
+		// don't wait to enter danger if already in danger
+		if (path.path[curr_i]->danger == FALSE)
 		{
+			next_i = path_next_section_index(&path, curr_i);
+
+			// move next to danger
+			while(path.path[next_i]->danger == FALSE)
+			{
+				prev_i = curr_i;
+				curr_i = move_train_one_segment_poll(trn, tos_default_speed, &path, curr_i);
+				next_i = path_next_section_index(&path, curr_i);
+			}
+
+			set_speed(trn, 0);
+
+			wprintf(train_wnd, "Waiting for Zamboni to clear segment %d\n", path.path[next_i]->id);
+
+			// wait for danger to pass
+			wait_till_occupied(path.path[next_i]);
+			wait_till_clear(path.path[next_i]);
+
+			// enter danger
+			set_path_section_switches(&path, curr_i, next_i);
+
 			prev_i = curr_i;
 			curr_i = move_train_one_segment_poll(trn, tos_default_speed, &path, curr_i);
-			next_i = path_next_section_index(&path, curr_i);
+			
+			reset_path_section_danger_switches(&path, prev_i, curr_i);
 		}
 
-		set_speed(trn, 0);
-
-		// wait for danger to pass
-		wait_till_occupied(path.path[next_i]);
-		wait_till_clear(path.path[next_i]);
-
-		// enter danger
-		set_path_section_switches(&path, curr_i, next_i);
-
-		prev_i = curr_i;
-		curr_i = move_train_one_segment_poll(trn, tos_default_speed, &path, curr_i);
 		next_i = path_next_section_index(&path, curr_i);
 		next_next_i = path_next_section_index(&path, next_i);
-
-		reset_path_section_danger_switches(&path, prev_i, curr_i);
 
 		// follow behind danger
 		while(path.path[next_next_i]->danger == TRUE)
@@ -1732,7 +1760,7 @@ int go_to_destination(train_train *trn)
 			curr_i = move_train_one_segment_poll(trn, tos_default_speed, &path, curr_i);
 			next_i = path_next_section_index(&path, curr_i);
 			next_next_i = path_next_section_index(&path, next_i);
-			if (path.path[next_i]->length > 1)
+			if (path.path[next_i]->length >= danger_min_wait_till_clear_segment_length)
 				wait_till_clear(path.path[curr_i]);
 		}
 
@@ -1802,30 +1830,37 @@ int go_through_destination(train_train *trn)
 
 	if (danger == TRUE)
 	{
-		next_i = path_next_section_index(&path, curr_i);
-		// move next to danger
-		while(path.path[next_i]->danger == FALSE)
+		// don't wait to enter danger if already in danger
+		if (path.path[curr_i]->danger == FALSE)
 		{
+			next_i = path_next_section_index(&path, curr_i);
+			// move next to danger
+			while(path.path[next_i]->danger == FALSE)
+			{
+				prev_i = curr_i;
+				curr_i = move_train_one_segment_poll(trn, tos_default_speed, &path, curr_i);
+				next_i = path_next_section_index(&path, curr_i);
+			}
+
+			set_speed(trn, 0);
+
+			wprintf(train_wnd, "Waiting for Zamboni to clear segment %d\n", path.path[next_i]->id);
+
+			// wait for danger to pass
+			wait_till_occupied(path.path[next_i]);
+			wait_till_clear(path.path[next_i]);
+
+			// enter danger
+			set_path_section_switches(&path, curr_i, next_i);
+
 			prev_i = curr_i;
 			curr_i = move_train_one_segment_poll(trn, tos_default_speed, &path, curr_i);
-			next_i = path_next_section_index(&path, curr_i);
+
+			reset_path_section_danger_switches(&path, prev_i, curr_i);
 		}
 
-		set_speed(trn, 0);
-
-		// wait for danger to pass
-		wait_till_occupied(path.path[next_i]);
-		wait_till_clear(path.path[next_i]);
-
-		// enter danger
-		set_path_section_switches(&path, curr_i, next_i);
-
-		prev_i = curr_i;
-		curr_i = move_train_one_segment_poll(trn, tos_default_speed, &path, curr_i);
 		next_i = path_next_section_index(&path, curr_i);
 		next_next_i = path_next_section_index(&path, next_i);
-
-		reset_path_section_danger_switches(&path, prev_i, curr_i);
 
 		// follow behind danger
 		while(path.path[next_next_i]->danger == TRUE)
@@ -1834,7 +1869,7 @@ int go_through_destination(train_train *trn)
 			curr_i = move_train_one_segment_poll(trn, tos_default_speed, &path, curr_i);
 			next_i = path_next_section_index(&path, curr_i);
 			next_next_i = path_next_section_index(&path, next_i);
-			if (path.path[next_i]->length > 1)
+			if (path.path[next_i]->length >= danger_min_wait_till_clear_segment_length)
 				wait_till_clear(path.path[curr_i]);
 		}
 
@@ -1889,6 +1924,8 @@ int go_through_destination(train_train *trn)
 		// path may be dangerous
 		if (path.path[path.length-1]->danger == TRUE)
 		{
+			wprintf(train_wnd, "Waiting for Zamboni to clear segment %d\n", path.path[path.length-1]->id);
+
 			// wait for danger to pass
 			wait_till_occupied(path.path[path.length-1]);
 			wait_till_clear(path.path[path.length-1]);
@@ -1911,6 +1948,8 @@ int go_through_destination(train_train *trn)
 
 		if (path.path[path.length-1]->danger == TRUE)
 		{
+			wprintf(train_wnd, "Returning to safe segment %d\n", path.path[next_i]->id);
+
 			// return to last safe segment
 			last_safe = path.path[next_i];
 			

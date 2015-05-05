@@ -41,7 +41,10 @@ void init_idt_entry (int intr_no, void (*isr) (void))
     i->offset_16_31 = ((unsigned int)isr >> 16) & 0xffff;
 }
 
-
+void add_ready_queue_p()
+{
+    add_ready_queue(p);
+}
 
 /*
  * Timer ISR
@@ -57,30 +60,36 @@ void dummy_isr_timer ()
      *  PUSHL   %EBP
      *  PUSHL   %ESI
      *  PUSHL   %EDI
+     * Save the context pointer ESP to the PCB
      */
-    asm ("isr_timer:");
-    asm ("pushl %eax;pushl %ecx;pushl %edx");
-    asm ("pushl %ebx;pushl %ebp;pushl %esi;pushl %edi");
-
-    /* Save the context pointer ESP to the PCB */
-    asm ("movl %%esp,%0" : "=m" (active_proc->esp) : );
+     asm volatile (
+        "isr_timer:;"
+        "pushl %%eax;"
+        "pushl %%ecx;"
+        "pushl %%edx;"
+        "pushl %%ebx;"
+        "pushl %%ebp;"
+        "pushl %%esi;"
+        "pushl %%edi;"
+        "movl %%esp, %0"
+        : "=r" (active_proc->esp)
+        :
+        );
 
     p = interrupt_table[TIMER_IRQ];
 
     if (p != NULL && p->state == STATE_INTR_BLOCKED)
     {        
         /* Add event handler to ready queue */
-        add_ready_queue (p);
+        add_ready_queue_p();
     }
 
     _TOS_time++;
 
     active_proc = dispatcher();
 
-    /* Restore context pointer ESP */
-    asm ("movl %0,%%esp" : : "m" (active_proc->esp) );
-
     /*
+     *  Restore context pointer ESP
      *  MOVB  $0x20,%AL ; Reset interrupt controller
      *  OUTB  %AL,$0x20
      *  POPL  %EDI      ; Restore previously saved context
@@ -92,10 +101,21 @@ void dummy_isr_timer ()
      *  POPL  %EAX
      *  IRET        ; Return to new process
      */
-    asm ("movb $0x20,%al;outb %al,$0x20");
-    asm ("popl %edi;popl %esi;popl %ebp;popl %ebx");
-    asm ("popl %edx;popl %ecx;popl %eax");
-    asm ("iret");
+    asm volatile (
+        "movl %0, %%esp;"
+        "movb $0x20,%%al;"
+        "outb %%al,$0x20;"
+        "popl %%edi;"
+        "popl %%esi;"
+        "popl %%ebp;"
+        "popl %%ebx;"
+        "popl %%edx;"
+        "popl %%ecx;"
+        "popl %%eax;"
+        "iret"
+        : 
+        : "r" (active_proc->esp)
+        );
 }
 
 
@@ -114,13 +134,21 @@ void dummy_isr_com1 ()
      *  PUSHL   %EBP
      *  PUSHL   %ESI
      *  PUSHL   %EDI
+     * Save the context pointer ESP to the PCB
      */
-    asm ("isr_com1:");
-    asm ("pushl %eax;pushl %ecx;pushl %edx");
-    asm ("pushl %ebx;pushl %ebp;pushl %esi;pushl %edi");
-
-    /* Save the context pointer ESP to the PCB */
-    asm ("movl %%esp,%0" : "=m" (active_proc->esp) : );
+     asm volatile (
+        "isr_com1:;"
+        "pushl %%eax;"
+        "pushl %%ecx;"
+        "pushl %%edx;"
+        "pushl %%ebx;"
+        "pushl %%ebp;"
+        "pushl %%esi;"
+        "pushl %%edi;"
+        "movl %%esp, %0"
+        : "=r" (active_proc->esp)
+        :
+        );
 
     p = interrupt_table[COM1_IRQ];
 
@@ -133,14 +161,12 @@ void dummy_isr_com1 ()
     }
 
     /* Add event handler to ready queue */
-    add_ready_queue (p);
+    add_ready_queue_p();
 
     active_proc = dispatcher();
 
-    /* Restore context pointer ESP */
-    asm ("movl %0,%%esp" : : "m" (active_proc->esp) );
-
     /*
+     *  Restore context pointer ESP
      *  MOVB  $0x20,%AL ; Reset interrupt controller
      *  OUTB  %AL,$0x20
      *  POPL  %EDI      ; Restore previously saved context
@@ -152,10 +178,21 @@ void dummy_isr_com1 ()
      *  POPL  %EAX
      *  IRET        ; Return to new process
      */
-    asm ("movb $0x20,%al;outb %al,$0x20");
-    asm ("popl %edi;popl %esi;popl %ebp;popl %ebx");
-    asm ("popl %edx;popl %ecx;popl %eax");
-    asm ("iret");
+    asm volatile (
+        "movl %0, %%esp;"
+        "movb $0x20,%%al;"
+        "outb %%al,$0x20;"
+        "popl %%edi;"
+        "popl %%esi;"
+        "popl %%ebp;"
+        "popl %%ebx;"
+        "popl %%edx;"
+        "popl %%ecx;"
+        "popl %%eax;"
+        "iret"
+        : 
+        : "r" (active_proc->esp)
+        );
 }
 
 
@@ -166,20 +203,28 @@ void isr_keyb();
 void dummy_isr_keyb()
 {
     /*
-     *	PUSHL	%EAX		; Save process' context
+     *  PUSHL   %EAX        ; Save process' context
      *  PUSHL   %ECX
      *  PUSHL   %EDX
      *  PUSHL   %EBX
      *  PUSHL   %EBP
      *  PUSHL   %ESI
      *  PUSHL   %EDI
+     * Save the context pointer ESP to the PCB
      */
-    asm ("isr_keyb:");
-    asm ("pushl %eax;pushl %ecx;pushl %edx");
-    asm ("pushl %ebx;pushl %ebp;pushl %esi;pushl %edi");
-
-    /* Save the context pointer ESP to the PCB */
-    asm ("movl %%esp,%0" : "=m" (active_proc->esp) : );
+     asm volatile (
+        "isr_keyb:;"
+        "pushl %%eax;"
+        "pushl %%ecx;"
+        "pushl %%edx;"
+        "pushl %%ebx;"
+        "pushl %%ebp;"
+        "pushl %%esi;"
+        "pushl %%edi;"
+        "movl %%esp, %0"
+        : "=r" (active_proc->esp)
+        :
+        );
 
     p = interrupt_table[KEYB_IRQ];
 
@@ -192,29 +237,38 @@ void dummy_isr_keyb()
     }
 
     /* Add event handler to ready queue */
-    add_ready_queue (p);
+    add_ready_queue_p();
 
     active_proc = dispatcher();
 
-    /* Restore context pointer ESP */
-    asm ("movl %0,%%esp" : : "m" (active_proc->esp) );
-
     /*
-     *	MOVB  $0x20,%AL	; Reset interrupt controller
-     *	OUTB  %AL,$0x20
-     *	POPL  %EDI      ; Restore previously saved context
+     *  Restore context pointer ESP
+     *  MOVB  $0x20,%AL ; Reset interrupt controller
+     *  OUTB  %AL,$0x20
+     *  POPL  %EDI      ; Restore previously saved context
      *  POPL  %ESI
      *  POPL  %EBP
      *  POPL  %EBX
      *  POPL  %EDX
      *  POPL  %ECX
      *  POPL  %EAX
-     *	IRET		; Return to new process
+     *  IRET        ; Return to new process
      */
-    asm ("movb $0x20,%al;outb %al,$0x20");
-    asm ("popl %edi;popl %esi;popl %ebp;popl %ebx");
-    asm ("popl %edx;popl %ecx;popl %eax");
-    asm ("iret");
+    asm volatile (
+        "movl %0, %%esp;"
+        "movb $0x20,%%al;"
+        "outb %%al,$0x20;"
+        "popl %%edi;"
+        "popl %%esi;"
+        "popl %%ebp;"
+        "popl %%ebx;"
+        "popl %%edx;"
+        "popl %%ecx;"
+        "popl %%eax;"
+        "iret"
+        : 
+        : "r" (active_proc->esp)
+        );
 }
 
 /*
@@ -231,21 +285,27 @@ void dummy_isr_panic()
      *  PUSHL   %EBP
      *  PUSHL   %ESI
      *  PUSHL   %EDI
+     * Save the context pointer ESP to the PCB
      */
-    asm ("isr_panic:");
-    asm ("pushl %eax;pushl %ecx;pushl %edx");
-    asm ("pushl %ebx;pushl %ebp;pushl %esi;pushl %edi");
-
-    /* Save the context pointer ESP to the PCB */
-    asm ("movl %%esp,%0" : "=m" (active_proc->esp) : );
+     asm volatile (
+        "isr_panic:;"
+        "pushl %%eax;"
+        "pushl %%ecx;"
+        "pushl %%edx;"
+        "pushl %%ebx;"
+        "pushl %%ebp;"
+        "pushl %%esi;"
+        "pushl %%edi;"
+        "movl %%esp, %0"
+        : "=r" (active_proc->esp)
+        :
+        );
 
     print_all_processes(kernel_window);
     panic ("service_intr_0x0-0xf: Panic interrupt!");
 
-    /* Restore context pointer ESP */
-    asm ("movl %0,%%esp" : : "m" (active_proc->esp) );
-
     /*
+     *  Restore context pointer ESP
      *  MOVB  $0x20,%AL ; Reset interrupt controller
      *  OUTB  %AL,$0x20
      *  POPL  %EDI      ; Restore previously saved context
@@ -257,10 +317,21 @@ void dummy_isr_panic()
      *  POPL  %EAX
      *  IRET        ; Return to new process
      */
-    asm ("movb $0x20,%al;outb %al,$0x20");
-    asm ("popl %edi;popl %esi;popl %ebp;popl %ebx");
-    asm ("popl %edx;popl %ecx;popl %eax");
-    asm ("iret");
+    asm volatile (
+        "movl %0, %%esp;"
+        "movb $0x20,%%al;"
+        "outb %%al,$0x20;"
+        "popl %%edi;"
+        "popl %%esi;"
+        "popl %%ebp;"
+        "popl %%ebx;"
+        "popl %%edx;"
+        "popl %%ecx;"
+        "popl %%eax;"
+        "iret"
+        : 
+        : "r" (active_proc->esp)
+        );
 }
 
 /*
@@ -277,14 +348,26 @@ void dummy_isr_default()
      *  PUSHL   %EBP
      *  PUSHL   %ESI
      *  PUSHL   %EDI
+     * Save the context pointer ESP to the PCB
      */
-    asm ("isr_default:");
-    asm ("pushl %eax;pushl %ecx;pushl %edx");
-    asm ("pushl %ebx;pushl %ebp;pushl %esi;pushl %edi");
+     asm volatile (
+        "isr_default:;"
+        "pushl %%eax;"
+        "pushl %%ecx;"
+        "pushl %%edx;"
+        "pushl %%ebx;"
+        "pushl %%ebp;"
+        "pushl %%esi;"
+        "pushl %%edi;"
+        "movl %%esp, %0"
+        : "=r" (active_proc->esp)
+        :
+        );
 
     /* do nothing */
 
     /*
+     *  Restore context pointer ESP
      *  MOVB  $0x20,%AL ; Reset interrupt controller
      *  OUTB  %AL,$0x20
      *  POPL  %EDI      ; Restore previously saved context
@@ -296,10 +379,21 @@ void dummy_isr_default()
      *  POPL  %EAX
      *  IRET        ; Return to new process
      */
-    asm ("movb $0x20,%al;outb %al,$0x20");
-    asm ("popl %edi;popl %esi;popl %ebp;popl %ebx");
-    asm ("popl %edx;popl %ecx;popl %eax");
-    asm ("iret");
+    asm volatile (
+        "movl %0, %%esp;"
+        "movb $0x20,%%al;"
+        "outb %%al,$0x20;"
+        "popl %%edi;"
+        "popl %%esi;"
+        "popl %%ebp;"
+        "popl %%ebx;"
+        "popl %%edx;"
+        "popl %%ecx;"
+        "popl %%eax;"
+        "iret"
+        : 
+        : "r" (active_proc->esp)
+        );
 }
 
 void wait_for_interrupt (int intr_no)

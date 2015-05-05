@@ -2,8 +2,8 @@
 #include <kernel.h>
 
 // determines location to print primes
-// static WINDOW null_window_def = {0, 0, 80, 1, 0, 0, ' '};
-// WINDOW* null_window = &null_window_def;
+static WINDOW null_window_def = {68, 0, 12, 1, 0, 0, ' '};
+WINDOW* null_window = &null_window_def;
 
 volatile unsigned int null_prime;
 volatile BOOL prime_reset;
@@ -19,6 +19,8 @@ void null_process(PROCESS proc, PARAM param)
 	prime_reset = TRUE;
 	new_start = param;
 	null_prime = 2;
+
+	// int done = FALSE;
 
 	while(1)
 	{
@@ -45,11 +47,9 @@ void null_process(PROCESS proc, PARAM param)
 		}
 		null_prime = i;
 
-		// // wprintf(null_window, "\n%d", i); // causes the timer notifier to break
-		// // for(j=0;j<0xffffff;j++);
+		// wprintf(null_window, "\n%u", i);
 
-
-		// // print primes safely
+		// print primes faster
 		// for (j=i; pos >= (WORD*)WINDOW_BASE_ADDR + WINDOW_OFFSET(null_window, null_window->cursor_x, null_window->cursor_y); pos--, j/=10)
 		// {
 		// 	poke_w((MEM_ADDR)pos, ('0' + (j % 10)) | 0x0F00);

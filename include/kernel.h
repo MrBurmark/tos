@@ -26,6 +26,8 @@ int k_strcmp(const char* str1, const char* str2);
 void *k_memset(void *str, int c, int len);
 int atoi(const char* str);
 BOOL is_num(const char *str);
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+#define max(a, b) (((a) > (b)) ? (a) : (b))
 
 /*=====>>> mem.c <<<========================================================*/
 

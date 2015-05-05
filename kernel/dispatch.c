@@ -27,12 +27,16 @@ void add_ready_queue (PROCESS proc)
 	volatile int saved_if;
 	DISABLE_INTR(saved_if);
 
-	// kprintf("add proc number %d to rq\n", proc - pcb);
-	// print_pcb(kernel_window, proc);
-	// print_all_processes(kernel_window);
+	if (proc->magic != MAGIC_PCB)
+	{
+		kprintf("active_proc number %d\n", active_proc - pcb);
+		kprintf("add proc number %d to rq\n", proc - pcb);
+		print_pcb(kernel_window, proc);
+		print_all_processes(kernel_window);
+	}
 
-	assert(proc->used == TRUE);
 	assert(proc->magic == MAGIC_PCB);
+	assert(proc->used == TRUE);
 
 	// clear_window(kernel_window);
 
@@ -162,7 +166,7 @@ PROCESS dispatcher()
  */
 void resign()
 {
-	asm("pushfl;"
+	asm volatile ("pushfl;"
 		"cli;"
 		"popl %%eax;"
 		"xchg (%%esp), %%eax;"
@@ -179,8 +183,10 @@ void resign()
 		: "=r" (active_proc->esp)
 		:
 		);
+
 	active_proc = dispatcher();
-	asm("movl %0, %%esp;"
+	
+	asm volatile ("movl %0, %%esp;"
 		"popl %%edi;"
 		"popl %%esi;"
 		"popl %%ebp;"

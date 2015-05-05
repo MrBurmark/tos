@@ -98,6 +98,37 @@ void history_down()
 	}
 }
 
+void cycle_history()
+{
+	input_buffer *history_prev = history + (history_head - history - 1)  % SHELL_HISTORY_SIZE;
+	// copy current to head if necessary
+	if (history_head != history_current)
+	{
+		*history_head = *history_current;
+	}
+
+	if (history_prev->used == TRUE)
+	{
+		if (k_memcmp(history_prev->buffer, history_head->buffer, max(history_prev->length, history_head->length)) == 0)
+		{
+			// previous same as head
+			clear_in_buf(history_head);
+		}
+		else
+		{
+			// previous different from head, move head
+			history_head = history + ((history_head - history + 1) % SHELL_HISTORY_SIZE);
+		}
+	}
+	else
+	{
+		// no history, move head
+		history_head = history + ((history_head - history + 1) % SHELL_HISTORY_SIZE);
+	}
+	// set current to head
+	history_current = history_head;
+}
+
 
 void print_commands(WINDOW *wnd, const command *cmds)
 {
@@ -255,7 +286,7 @@ void shell_process(PROCESS proc, PARAM param)
 
 		cmd = find_command(shell_cmd, history_current->buffer);
 
-		if (history_current->buffer[0] == '\0')
+		if (history_current->length <= 0)
 		{
 			// empty line, don't print
 			continue;
@@ -278,14 +309,7 @@ void shell_process(PROCESS proc, PARAM param)
 				wprintf(shell_wnd, "%s exited with code %d\n", cmd->name, i);
 		}
 
-		// copy current to head if necessary
-		if (history_head != history_current)
-		{
-			*history_head = *history_current;
-		}
-		// move head and current along
-		history_head = history + ((history_head - history + 1) % SHELL_HISTORY_SIZE);
-		history_current = history_head;
+		cycle_history();
 	}
 }
 
@@ -376,7 +400,7 @@ int prime_func(int argc, char **argv)
 {
 	if (argc == 1)
 	{
-		wprintf(shell_wnd, "%d\n", null_prime);
+		wprintf(shell_wnd, "%u\n", null_prime);
 	}
 	else if (argc > 1)
 	{

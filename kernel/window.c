@@ -504,8 +504,8 @@ void wprintf(WINDOW* wnd, const char *fmt, ...)
 
     va_start(argp, fmt);
     vsprintf(buf, fmt, argp);
-    output_string(wnd, buf);
     va_end(argp);
+    output_string(wnd, buf);
 }
 
 
@@ -520,8 +520,8 @@ void kprintf(const char *fmt, ...)
 
     va_start(argp, fmt);
     vsprintf(buf, fmt, argp);
-    output_string(kernel_window, buf);
     va_end(argp);
+    output_string(kernel_window, buf);
 }
 
 int k_sprintf(char *str, const char *fmt, ...)

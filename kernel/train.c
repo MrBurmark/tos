@@ -1,6 +1,20 @@
 
 #include <kernel.h>
 
+#define UNKNOWN 0
+#define TRACK_SECTION 1
+#define TRACK_SWITCH 2
+#define GREEN 'G'
+#define RED 'R'
+#define RED_TRAIN 20
+#define BLACK_TRAIN 78
+#define CARGO_CAR 5
+#define TOS_TRACK_NUMBER_SECTIONS 16
+#define TOS_TRACK_NUMBER_SWITCHES 9
+#define TOS_NUMBER_TRAINS 3
+#define TIME_MULTIPLIER 8000
+#define CARGO_PROCESS_NAME "Get Cargo process"
+
 static WINDOW train_window_def = {0, 0, 80 - MAZE_WIDTH, 10, 0, 0, '_'};
 WINDOW* train_wnd = &train_window_def;
 
@@ -14,24 +28,14 @@ volatile BOOL TOS_train_getting_cargo;
 unsigned int last_cmd_sent = 0;
 
 int train_cmd_pause = 15;
-int TOS_track_length_time_multiplier = 8000;
+int TOS_track_length_time_multiplier = TIME_MULTIPLIER;
 int zamboni_default_speed = 5;
 int tos_switch_length = 1;
 int tos_capture_speed = 4;
 int tos_default_speed = 5;
 int danger_min_wait_till_clear_segment_length = 2;
 
-#define UNKNOWN 0
-#define TRACK_SECTION 1
-#define TRACK_SWITCH 2
-#define GREEN 'G'
-#define RED 'R'
-#define RED_TRAIN 20
-#define BLACK_TRAIN 78
-#define CARGO_CAR 5
-#define TOS_TRACK_NUMBER_SECTIONS 16
-#define TOS_TRACK_NUMBER_SWITCHES 9
-#define TOS_NUMBER_TRAINS 3
+
 
 // track pieces have an id and type
 // TRACK_SECTION: uses length, track1, track2
@@ -87,6 +91,7 @@ typedef struct _track_status
 	unsigned char s88_clear 	: 1;
 	unsigned char configured 	: 1;
 	unsigned char setup			: 1;
+	unsigned char manual		: 1;
 	unsigned char number_trains;
 	train_train trains[TOS_NUMBER_TRAINS];
 } track_status;
@@ -473,118 +478,124 @@ void mark_dangerous_track_pieces()
 }
 
 // find and set-up initial locations for red, cargo, and black trains
-BOOL find_TOS_configuration()
+BOOL find_TOS_configuration(BOOL ignore_zamboni)
 {
 	int i, wait_time;
 
 	reset_TOS_track_status();
 
-	TOS_track_status.number_trains = 0;
+	// TOS_track_status.number_trains = 0;
 
-	// find engine
-	if (check_segment(&TOS_track_status, 8))
+	if (TOS_track_status.manual == FALSE)
 	{
-		red_train->position = &TOS_track_sections[8];
-		red_train->destination = &TOS_track_sections[8];
-		red_train->next = &TOS_track_switches[6];
-		red_train->prev = NULL;
-	}
-	else if (check_segment(&TOS_track_status, 5))
-	{
-		red_train->position = &TOS_track_sections[5];
-		red_train->destination = &TOS_track_sections[5];
-		red_train->next = &TOS_track_switches[3];
-		red_train->prev = NULL;
-	}
-	else
-	{
-		return FALSE;
-	}
-	TOS_track_status.number_trains++;
-
-	wprintf(train_wnd, "Red train found at section %d\n", red_train->position->id);
-
-	// find car
-	if (check_segment(&TOS_track_status, 2))
-	{
-		cargo_car->position = &TOS_track_sections[2];
-		cargo_car->destination = &TOS_track_sections[8];
-		cargo_car->next = UNKNOWN;
-		cargo_car->prev = UNKNOWN;
-	}
-	else if (check_segment(&TOS_track_status, 11))
-	{
-		cargo_car->position = &TOS_track_sections[11];
-		cargo_car->destination = &TOS_track_sections[5];
-		cargo_car->next = UNKNOWN;
-		cargo_car->prev = UNKNOWN;
-	}
-	else if (check_segment(&TOS_track_status, 16))
-	{
-		cargo_car->position = &TOS_track_sections[16];
-		cargo_car->destination = &TOS_track_sections[5];
-		cargo_car->next = UNKNOWN;
-		cargo_car->prev = UNKNOWN;
-	}
-	else
-	{
-		return FALSE;
-	}
-	TOS_track_status.number_trains++;
-
-	wprintf(train_wnd, "Cargo car found at section %d\n", cargo_car->position->id);
-
-	// wait long enough for 3 round trips
-	wait_time = TOS_track_length_time_multiplier * 28 * 3 / (zamboni_default_speed * zamboni_default_speed);
-
-	// find Zamboni
-	i = get_TOS_time();
-	while (get_TOS_time() - i < wait_time)
-	{
-		if (check_segment(&TOS_track_status, 7) == TRUE)
+		// find engine
+		if (check_segment(&TOS_track_status, 8))
 		{
-			// zamboni found
-			black_train->position = &TOS_track_sections[7];
-			black_train->destination = UNKNOWN;
-			black_train->next = UNKNOWN;
-			black_train->prev = UNKNOWN;
-			TOS_track_status.number_trains++;
-			wprintf(train_wnd, "Zamboni found! ");
-			break;
+			red_train->position = &TOS_track_sections[8];
+			red_train->destination = &TOS_track_sections[8];
+			red_train->next = &TOS_track_switches[6];
+			red_train->prev = NULL;
 		}
-	}
-	if (black_train->position != NULL)
-	{
-		// wait long enough for 3 trips to segment 10 or 6
-		wait_time = TOS_track_length_time_multiplier * 4 * 3 / (zamboni_default_speed * zamboni_default_speed);
-		i = get_TOS_time();
-		while (get_TOS_time() - i < wait_time)
+		else if (check_segment(&TOS_track_status, 5))
 		{
-			if (check_segment(&TOS_track_status, 10) == TRUE)
-			{
-				// zamboni going clockwise
-				black_train->next = &TOS_track_switches[5];
-				black_train->prev = &TOS_track_sections[6];
-				wprintf(train_wnd, "clockwise\n");
-				break;
-			}
-			if (check_segment(&TOS_track_status, 6) == TRUE)
-			{
-				// zamboni going anti-clockwise
-				black_train->next = &TOS_track_sections[6];
-				black_train->prev = &TOS_track_switches[5];
-				wprintf(train_wnd, "anti-clockwise\n");
-				break;
-			}
-		}
-		if (black_train->next == NULL)
-		{
-			// should never happen
-			return FALSE;
+			red_train->position = &TOS_track_sections[5];
+			red_train->destination = &TOS_track_sections[5];
+			red_train->next = &TOS_track_switches[3];
+			red_train->prev = NULL;
 		}
 		else
 		{
-			mark_dangerous_track_pieces();
+			return FALSE;
+		}
+		TOS_track_status.number_trains++;
+
+		wprintf(train_wnd, "Red train found at section %d\n", red_train->position->id);
+
+		// find car
+		if (check_segment(&TOS_track_status, 2))
+		{
+			cargo_car->position = &TOS_track_sections[2];
+			cargo_car->destination = &TOS_track_sections[8];
+			cargo_car->next = UNKNOWN;
+			cargo_car->prev = UNKNOWN;
+		}
+		else if (check_segment(&TOS_track_status, 11))
+		{
+			cargo_car->position = &TOS_track_sections[11];
+			cargo_car->destination = &TOS_track_sections[5];
+			cargo_car->next = UNKNOWN;
+			cargo_car->prev = UNKNOWN;
+		}
+		else if (check_segment(&TOS_track_status, 16))
+		{
+			cargo_car->position = &TOS_track_sections[16];
+			cargo_car->destination = &TOS_track_sections[5];
+			cargo_car->next = UNKNOWN;
+			cargo_car->prev = UNKNOWN;
+		}
+		else
+		{
+			return FALSE;
+		}
+		TOS_track_status.number_trains++;
+
+		wprintf(train_wnd, "Cargo car found at section %d\n", cargo_car->position->id);
+	}
+
+	if (ignore_zamboni == FALSE)
+	{
+		// wait long enough for 3 round trips
+		wait_time = TOS_track_length_time_multiplier * 28 * 3 / (zamboni_default_speed * zamboni_default_speed);
+
+		// find Zamboni
+		i = get_TOS_time();
+		while (get_TOS_time() - i < wait_time)
+		{
+			if (check_segment(&TOS_track_status, 7) == TRUE)
+			{
+				// zamboni found
+				black_train->position = &TOS_track_sections[7];
+				black_train->destination = UNKNOWN;
+				black_train->next = UNKNOWN;
+				black_train->prev = UNKNOWN;
+				TOS_track_status.number_trains++;
+				wprintf(train_wnd, "Zamboni found! ");
+				break;
+			}
+		}
+		if (black_train->position != NULL)
+		{
+			// wait long enough for 3 trips to segment 10 or 6
+			wait_time = TOS_track_length_time_multiplier * 4 * 3 / (zamboni_default_speed * zamboni_default_speed);
+			i = get_TOS_time();
+			while (get_TOS_time() - i < wait_time)
+			{
+				if (check_segment(&TOS_track_status, 10) == TRUE)
+				{
+					// zamboni going clockwise
+					black_train->next = &TOS_track_switches[5];
+					black_train->prev = &TOS_track_sections[6];
+					wprintf(train_wnd, "clockwise\n");
+					break;
+				}
+				if (check_segment(&TOS_track_status, 6) == TRUE)
+				{
+					// zamboni going anti-clockwise
+					black_train->next = &TOS_track_sections[6];
+					black_train->prev = &TOS_track_switches[5];
+					wprintf(train_wnd, "anti-clockwise\n");
+					break;
+				}
+			}
+			if (black_train->next == NULL)
+			{
+				// should never happen
+				return FALSE;
+			}
+			else
+			{
+				mark_dangerous_track_pieces();
+			}
 		}
 	}
 
@@ -593,10 +604,10 @@ BOOL find_TOS_configuration()
 	return TRUE;
 }
 
-BOOL configure_TOS_track()
+BOOL configure_TOS_track(BOOL ignore_zamboni)
 {
-	if (TOS_track_status.configured != TRUE)
-		find_TOS_configuration();
+	if (TOS_track_status.configured == FALSE)
+		find_TOS_configuration(ignore_zamboni);
 
 	return TRUE;
 }
@@ -1994,6 +2005,7 @@ int go_through_destination(train_train *trn)
 	return 0;
 }
 
+int reset_func(int argc, char **argv);
 
 //**************************
 //run the train application
@@ -2019,13 +2031,6 @@ void train_process(PROCESS self, PARAM param)
 
 		msg = (Train_Message *)receive(&sender);
 
-		if (TOS_train_getting_cargo)
-		{
-			wprintf(train_wnd, "Train is getting cargo, ignoring commands\n");
-			reply(sender);
-			continue;
-		}
-
 		// input was cleaned in shell
 		for (i = 0; i < msg->argc; i++)
 		{
@@ -2034,6 +2039,13 @@ void train_process(PROCESS self, PARAM param)
 		wprintf(train_wnd, "\n");
 
 		cmd = find_command(train_cmd, msg->argv[0]);
+
+		if (TOS_train_getting_cargo)
+		{
+			wprintf(train_wnd, "Train is getting cargo, ignoring non-reset commands\n");
+			reply(sender);
+			continue;
+		}
 
 		if (cmd->func == NULL)
 		{
@@ -2218,7 +2230,6 @@ int path_func(int argc, char **argv)
 	track_path path;
 	int dst_id, src_id;
 	BOOL ignore_zamboni = FALSE;
-	int tmp = TOS_track_length_time_multiplier;
 
 	if (argc < 3 || is_num(argv[1]) == FALSE || is_num(argv[2]) == FALSE)
 	{
@@ -2248,15 +2259,11 @@ int path_func(int argc, char **argv)
 		}
 	}
 
-	if (ignore_zamboni) TOS_track_length_time_multiplier = 0;
-
-	if (!ignore_zamboni && configure_TOS_track() == FALSE)
+	if (configure_TOS_track(ignore_zamboni) == FALSE)
 	{
 		wprintf(train_wnd, "Couldn't set up TOS track\n");
 		return 4;
 	}
-
-	if (ignore_zamboni) TOS_track_length_time_multiplier = tmp;
 
 	DJIKSTRA_path(&TOS_track_sections[src_id], &TOS_track_sections[dst_id], &path);
 	cycle_danger_path(&path);
@@ -2269,7 +2276,6 @@ int goto_func(int argc, char **argv)
 {
 	int dst_id;
 	unsigned char use_time = FALSE;
-	int tmp = TOS_track_length_time_multiplier;
 	BOOL ignore_zamboni = FALSE;
 
 	if (argc < 2)
@@ -2294,15 +2300,11 @@ int goto_func(int argc, char **argv)
 		}
 	}
 
-	if (ignore_zamboni) TOS_track_length_time_multiplier = 0;
-
-	if (configure_TOS_track() == FALSE)
+	if (configure_TOS_track(ignore_zamboni) == FALSE)
 	{
 		wprintf(train_wnd, "Couldn't set up TOS track\n");
 		return 3;
 	}
-
-	if (ignore_zamboni) TOS_track_length_time_multiplier = tmp;
 
 	if (argc > 2)
 	{
@@ -2320,26 +2322,103 @@ int goto_func(int argc, char **argv)
 	return 0;
 }
 
+int set_pos_next_func(int argc, char **argv)
+{
+	train_train *trn;
+	int curr_id = 0;
+	int next_id = 0;
+	BOOL next_switch = FALSE;
+
+	if (argc < 4)
+	{
+		wprintf(train_wnd, "set_pos_next train pos next\n");
+	}
+	if (k_strcmp("red_train", argv[1]) == 0)
+	{
+		trn = red_train;
+	}
+	else if (k_strcmp("cargo_car", argv[1]) == 0)
+	{
+		trn = cargo_car;
+	}
+	else
+	{
+		wprintf(train_wnd, "invalid train: not red_train or cargo_car\n");
+		return 1;
+	}
+
+	if (is_num(argv[2]))
+	{
+		curr_id = atoi(argv[2]);
+	}
+	if (is_num(argv[3]))
+	{
+		next_id = atoi(argv[3]);
+		next_switch = FALSE;
+	}
+	else if ((argv[3][0] == 's' || argv[3][0] == 'S') && is_num(&argv[3][1]))
+	{
+		next_id = atoi(&argv[3][1]);
+		next_switch = TRUE;
+	}
+
+	if (curr_id <= 0 || curr_id > TOS_TRACK_NUMBER_SECTIONS)
+	{
+		wprintf(train_wnd, "Invalid position track segment\n");
+		return 2;
+	}
+
+	if (next_switch == FALSE && next_id > 0 && next_id <= TOS_TRACK_NUMBER_SECTIONS
+			&& (TOS_track_sections[curr_id].track1 == &TOS_track_sections[next_id]
+			 || TOS_track_sections[curr_id].track2 == &TOS_track_sections[next_id]))
+	{
+		trn->position = &TOS_track_sections[curr_id];
+		trn->next = &TOS_track_sections[next_id];
+		trn->prev = find_next_piece(trn->position, trn->next);
+	}
+	else if (next_switch == TRUE && next_id > 0 && next_id <= TOS_TRACK_NUMBER_SWITCHES
+			&& (TOS_track_sections[curr_id].track1 == &TOS_track_switches[next_id]
+			 || TOS_track_sections[curr_id].track2 == &TOS_track_switches[next_id]))
+	{
+		trn->position = &TOS_track_sections[curr_id];
+		trn->next = &TOS_track_switches[next_id];
+		trn->prev = find_next_piece(trn->position, trn->next);
+	}
+	else
+	{
+		wprintf(train_wnd, "Invalid next track piece\n");
+		return 3;
+	}
+
+	TOS_track_status.manual = TRUE;
+
+	return 0;
+}
+
 void get_cargo_process(PROCESS self, PARAM param)
 {
-	int tmp = TOS_track_length_time_multiplier;
 
-	// forces full setup procedure
-	TOS_track_status.setup = FALSE;
-
-	if (param) TOS_track_length_time_multiplier = 0;
-
-	if (find_TOS_configuration() == FALSE)
+	if (TOS_track_status.manual == FALSE)
 	{
-		if (param) TOS_track_length_time_multiplier = tmp;
+		// forces full setup procedure
+		TOS_track_status.setup = FALSE;
+	}
 
+	if (find_TOS_configuration(param) == FALSE)
+	{
 		wprintf(train_wnd, "Couldn't set up TOS track\n");
 		exit();
 	}
 
-	if (param) TOS_track_length_time_multiplier = tmp;
+	if (cargo_car->position == NULL || red_train->position == NULL)
+	{
+		wprintf(train_wnd, "Red train or Cargo car not setup\n");
+		exit();
+	}
 
+	// set destinations, may be NULL if manual set-up not complete
 	red_train->destination = cargo_car->position;
+	cargo_car->destination = red_train->position;
 
 	go_through_destination(red_train);
 
@@ -2371,9 +2450,38 @@ int get_cargo_func(int argc, char **argv)
 
 	TOS_train_getting_cargo = TRUE;
 
-	create_process (get_cargo_process, 4, param, "Get Cargo process");
+	create_process (get_cargo_process, 4, param, CARGO_PROCESS_NAME);
 
 	resign();
+
+	return 0;
+}
+
+int reset_func(int argc, char **argv)
+{
+	// PROCESS gc_proc;
+
+	set_speed(red_train, 0);
+	set_speed(black_train, 0);
+
+	// // if get cargo process is running, kill it
+	// do 
+	// {
+	// 	gc_proc = get_proc_by_name(CARGO_PROCESS_NAME);
+	// 	if (gc_proc == NULL)
+	// 		break;
+	// 	if (kill_process(gc_proc, FALSE) == TRUE)
+	// 		break;
+	// }
+	// while (1);
+
+	TOS_train_getting_cargo = FALSE;
+
+	TOS_track_status.setup = FALSE;
+
+	TOS_track_status.manual = FALSE;
+
+	TOS_track_length_time_multiplier = TIME_MULTIPLIER;
 
 	return 0;
 }
@@ -2399,6 +2507,8 @@ void init_train(WINDOW* wnd)
 	init_command("path", path_func, "Print a path from start to destination", &train_cmd[i++]);
 	init_command("goto", goto_func, "send the red train to the destination", &train_cmd[i++]);
 	init_command("gc", get_cargo_func, "red train links with the cargo car and returns to its starting location", &train_cmd[i++]);
+	init_command("reset", reset_func, "resets the train configuration, stops all trains", &train_cmd[i++]);
+	init_command("set_pos_next", set_pos_next_func, "Manually sets the position and next segment of a train", &train_cmd[i++]);
 
 	// init unused commands
 	while (i < MAX_COMMANDS)
@@ -2411,6 +2521,7 @@ void init_train(WINDOW* wnd)
 
 	TOS_track_status.setup = FALSE;
 	TOS_train_getting_cargo = FALSE;
+	TOS_track_status.manual = FALSE;
 	red_train->id = RED_TRAIN;
 	red_train->speed = 0;
 	red_train->position = NULL;

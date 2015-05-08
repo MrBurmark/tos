@@ -137,6 +137,7 @@ PORT create_process(void (*new_proc) (PROCESS, PARAM),
 PROCESS fork();
 #endif
 BOOL kill_process (PROCESS proc, BOOL force);
+PROCESS get_proc_by_name(char *name);
 void exit();
 void print_pcb(WINDOW* wnd, PROCESS p);
 void print_process(WINDOW* wnd, PROCESS p);

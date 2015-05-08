@@ -135,6 +135,23 @@ BOOL kill_process (PROCESS proc, BOOL force)
 	}
 }
 
+PROCESS get_proc_by_name(char *name)
+{
+	PROCESS proc, end;
+
+	/* initialize all pcbs as used = FALSE */
+	end = pcb + MAX_PROCS;
+	for (proc = pcb; proc < end; proc++)
+	{
+		if (proc->used == TRUE && k_strcmp(name, proc->name) == 0)
+		{
+			return proc;
+		}
+	}
+
+	return NULL;
+}
+
 // gives the null process the message to kill the other process
 void exit()
 {
